@@ -11,7 +11,7 @@ class NetTool
 {
   static function getFQDNHostname() 
   {
-     $fd=popen("hostname -f","r");
+     $fd=popen("/bin/hostname -f","r");
      if ($fd===FALSE)
      {
       debug::printf(LOG_ERR, "hostname command not found fallback to gethostname()...\n");
@@ -31,7 +31,7 @@ class NetTool
 
   static function getNproc() 
   {
-     $fd=popen("nproc","r");
+     $fd=popen("/usr/bin/nproc","r");
      if ($fd===FALSE)
      {
       debug::printf(LOG_ERR, "nproc command not found forcing max_workers to 1\n");
@@ -41,10 +41,10 @@ class NetTool
      $nproc=fgets($fd,4096);
      fclose($fd);
      $nproc=str_replace("\r\n", "", $nproc);
-     $nproc=str_replace("\n", "", $nproc);
+     $nproc=intval(str_replace("\n", "", $nproc));
      if (!is_int($nproc)||$nproc<=0)
      {
-       debug::printf(LOG_ERR, "nproc command not respond correctly forcing max_workers to 1\n");
+       debug::printf(LOG_ERR, "nproc command (%s) not respond correctly forcing max_workers to 1\n", $nproc);
        return 1;
      }
      return $nproc;

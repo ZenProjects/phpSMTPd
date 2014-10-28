@@ -55,7 +55,7 @@ class SMTPProtocol
       $this->base = $base;
       if (!$this->base) 
       {
-	  debug::exit_with_error(-1,"Couldn't open event base\n");
+	  debug::exit_with_error(59,"Couldn't open event base\n");
       }
 
       $this->options=$options;
@@ -106,22 +106,24 @@ class SMTPProtocol
       }
       debug::printf(LOG_NOTICE, "Starting ESMP Session on fd:%s id:%s at %s with client at %s:%s\n",$fd,$this->id,$this->hostname,$this->address[0],@$this->address[1]);
 
+      /*
       $this->tt = new \TokyoTyrantTable("127.0.0.1", 1978);
       if (!$this->tt)
       {
 	  $this->base->exit(NULL);
-	  debug::exit_with_error(-1,"Couldn't create TokyoTyrantTable\n");
+	  debug::exit_with_error(60,"Couldn't create TokyoTyrantTable\n");
       }
+      */
 
       if ($this->tls&&!$this->sslctx)
       {
-	  debug::exit_with_error(-1,"no ssl context with tls option activated\n");
+	  debug::exit_with_error(62,"no ssl context with tls option activated\n");
       }
 
       if (!$this->cnx = new EventBufferEvent($this->base, $fd, EventBufferEvent::OPT_CLOSE_ON_FREE))
       {
 	  $this->base->exit(NULL);
-	  debug::exit_with_error(-1,"Couldn't create bufferevent\n");
+	  debug::exit_with_error(63,"Couldn't create bufferevent\n");
       }
 
       $this->clientData = '';
@@ -132,7 +134,7 @@ class SMTPProtocol
       $this->cnx->setCallbacks([$this, "ev_read"], NULL, [$this, 'ev_error'], $this);
       $this->cnx->enable(Event::READ);
       $this->connect_time=microtime(true);
-      $this->ev_write($this, '220 '.$this->hostname." ESMTP - PHP-SMTPd at ".gmdate('r')." on stdin\r\n");
+      $this->ev_write($this, '220 '.$this->hostname." ESMTP - ".$this->options['daemon_processname']." at ".gmdate('r')." on stdin\r\n");
       //var_dump($this);
   }
 
@@ -157,14 +159,18 @@ class SMTPProtocol
 	$errno = EventUtil::getLastSocketErrno();
 
 	/*
+	     Errno 2 = ENOENT
+	     	 No such file or directory
+
 	     Errno 11 = EAGAIN or EWOULDBLOCK
 		 The socket is marked non-blocking and the receive operation would block, or a receive timeout had been set and the timeout expired before data was received.  POSIX.1-2001 allows either error to
 		 be returned for this case, and does not require these constants to have the same value, so a portable application should check for both possibilities.	   
 
-             Errno 104 = Connection reset by peer
+             Errno 104 = ECONNRESET
+	     	 Connection reset by peer
 
 	*/
-	if ($errno == 11 || $errno == 104) 
+	if ($errno = 2 || $errno == 11 || $errno == 104) 
 	{
 	    $address=$ctx->address;
 	    debug::printf(LOG_NOTICE, "The client %s:%s has disconected\n",$address[0],$address[1]);
@@ -178,7 +184,7 @@ class SMTPProtocol
 		$errno, EventUtil::getLastSocketError());
 
 	    $ctx->base->exit(NULL);
-	    debug::exit_with_error(-1,"Event Error\n");
+	    debug::exit_with_error(64,"Event Error\n");
 	}
      }
      else
@@ -206,6 +212,7 @@ class SMTPProtocol
 	     if ($drain) while($input_buffer->length > 0) $input_buffer->drain($ctx->maxRead);
 	     $ctx->cnx->free();
 	     if (isset($ctx->listener->connections[$ctx->id])) unset($ctx->listener->connections[$ctx->id]);
+	     else exit(0);
        }
   }
 
@@ -216,6 +223,7 @@ class SMTPProtocol
 	$ctx->cnx->disable(Event::READ | Event::WRITE);
 	$ctx->cnx->free(); 
 	if (isset($ctx->listener->connections[$ctx->id])) unset($ctx->listener->connections[$ctx->id]);
+	else exit(0);
       }
   }
 
@@ -295,7 +303,7 @@ class SMTPProtocol
      $ret=true;
 
      if (isset($ctx->listener->connections[$ctx->id])) 
-      $connexion_data= isset($ctx->listener->connections[$ctx->id]);
+      $connexion_data=$ctx->listener->connections[$ctx->id];
      else 
       $connexion_data=$ctx;
      //debug::print_r(LOG_DEBUG,$this->mimeDecode($connexion_data->clientData));
@@ -384,6 +392,13 @@ class SMTPProtocol
     return $parsed_mail;
   }
 
+  protected function checkrecipient($recipient)
+  {
+     if (isset($this->options['listes'][$recipient]))
+      return true;
+     return false;
+  }
+
   protected function SMTPcmd($buffer, $ctx, $line) 
   {
       debug::printf(LOG_NOTICE,'R('.$ctx->id.'): '.$line);
@@ -412,6 +427,14 @@ class SMTPProtocol
 		&& ($ctx->state!=self::STATE_HEADER))
 	      {
 		$this->ev_write($ctx, "500 Mail before helo\r\n");
+		$this->ev_close($ctx);
+		break;
+	      }
+
+	      // check if inbound queue is full
+	      if (@shm_get_var($this->options['ipc_shm'],1)===true) 
+	      {
+		$this->ev_write($ctx, "452 Requested action not taken: insufficient system storage\r\n");
 		$this->ev_close($ctx);
 		break;
 	      }
@@ -453,12 +476,26 @@ class SMTPProtocol
 		$this->ev_close($ctx);
 		break;
 	      }
+	      // check if inbound queue is full
+	      if (@shm_get_var($this->options['ipc_shm'],1)===true) 
+	      {
+		$this->ev_write($ctx, "452 Requested action not taken: insufficient system storage\r\n");
+		$this->ev_close($ctx);
+		break;
+	      }
 	      if (preg_match('/^RCPT TO:<(.*)>$/i', $line, $arr)==1)
 	      {
 		 debug::printf(LOG_NOTICE,"RCPT: to:<%s>\n",$arr[1]);
 		 if (RFC822::is_valid_email_address($arr[1]))
 		 {
 		   debug::printf(LOG_NOTICE,"TO <%s> address valid\n",$arr[1]);
+		   if (!$this->checkrecipient($arr[1]))
+		   {
+		     debug::printf(LOG_ERR,"Recipient %s rejected\n",$arr[1]);
+		     $this->ev_write($ctx, "550 Requested action not taken: mailbox unavailable\r\n");
+		     $this->ev_close($ctx);
+		     break;
+		   }
 		   $ctx->enveloppe['rcpt'][]=$arr[1];
 		   $this->ev_write($ctx, "250 OK rcpt\r\n");
 		   $ctx->state=self::STATE_HEADER;
@@ -586,6 +623,32 @@ class SMTPProtocol
 	      break;
 
 	  case strncasecmp('VRFY', $line, 4):
+	      if (($ctx->state!=self::STATE_HELO)
+		&& ($ctx->state!=self::STATE_HEADER))
+	      {
+		$this->ev_write($ctx, "503 Bad sequence of commands\r\n");
+		$this->ev_close($ctx);
+		break;
+	      }
+	      if (preg_match('/^VRFY <(.*)>$/i', $line, $arr)==1)
+	      {
+		 debug::printf(LOG_NOTICE,"VRFY: <%s>\n",$arr[1]);
+		 if (RFC822::is_valid_email_address($arr[1]))
+		 {
+		   debug::printf(LOG_NOTICE,"VRFY <%s> address are valid\n",$arr[1]);
+		   if (!$this->checkrecipient($arr[1]))
+		   {
+		     debug::printf(LOG_NOTICE,"VRFY %s address unknown\n",$arr[1]);
+		     $this->ev_write($ctx, "550 Requested action not taken: mailbox unavailable\r\n");
+		     break;
+		   }
+		   debug::printf(LOG_NOTICE,"VRFY %s address known\n",$arr[1]);
+		   $this->ev_write($ctx, "250 ".$arr[1]."\r\n");
+		   break;
+		 }
+	      }
+	      $this->ev_write($ctx, "501 RCPT - Syntax error in parameters or arguments\r\n");
+	      break;
 	  case strncasecmp('EXPN', $line, 4):
 	  case strncasecmp('SAML', $line, 4):
 	  case strncasecmp('SOML', $line, 4):

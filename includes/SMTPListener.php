@@ -35,7 +35,7 @@ class SMTPListener
       $this->base = $base;
       if (!$this->base) 
       {
-	  debug::exit_with_error(-1,"Couldn't open event base\n");
+	  debug::exit_with_error(56,"Couldn't open event base\n");
       }
 
       if (is_string($connect_string))
@@ -52,7 +52,7 @@ class SMTPListener
 		$errno, EventUtil::getLastSocketError());
 
 	    $this->base->exit(NULL);
-	    debug::exit_with_error(-1,"Couldn't create listener\n");
+	    debug::exit_with_error(57,"Couldn't create listener\n");
 	}
 
 	$this->listener->setErrorCallback([$this, 'ev_error_listener']);
@@ -112,7 +112,7 @@ class SMTPListener
      if (!$ctx->connections[$id]) 
      {
 	 $this->base->exit(NULL);
-	 debug::exit_with_error(-1,"Failed creating smtp protocol\n");
+	 debug::exit_with_error(58,"Failed creating smtp protocol\n");
      }
   }
 
@@ -145,7 +145,7 @@ class SMTPListener
 	     $errno, EventUtil::getLastSocketError());
 
 	 $this->base->exit(NULL);
-	 debug::exit_with_error(-1,"Exist on Error");
+	 debug::exit_with_error(50,"Exist on Error");
      }
 
   }

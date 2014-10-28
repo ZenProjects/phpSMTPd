@@ -19,7 +19,8 @@ class SMTPException extends \Exception
      $this->LogLevel=func_get_arg(0);
      if ($this->LogLevel!=LOG_INFO&&$this->LogLevel!=LOG_NOTICE)
      { 
-       $trace=debug_backtrace()[0];
+       $backtrace=debug_backtrace();
+       $trace=$backtrace[0];
        $vargs=array_merge($args,array($trace['file'],$trace['line']));
        $format=func_get_arg(1);
        $format=preg_replace("/\n$/","",$format);
@@ -46,7 +47,7 @@ class Debug
 {
   public function open($logname="SuperListd",$syslog_flag=LOG_PID,$syslog_facility=LOG_MAIL) 
   {
-      openlog($logname, LOG_PID, LOG_MAIL);
+      openlog($logname, $syslog_flag, LOG_MAIL);
   }
   static function exit_with_error($arg)
   {
@@ -59,7 +60,8 @@ class Debug
      if ($num_args<=1) return;
      $args=func_get_args();
      unset($args[1]);
-     $trace=debug_backtrace()[0];
+     $backtrace=debug_backtrace();
+     $trace=$backtrace[0];
      $vargs=array_merge($args,array($trace['file'],$trace['line']));
      $format=func_get_arg(1);
      $format=preg_replace("/\n$/","",$format);
@@ -86,7 +88,8 @@ class Debug
      unset($args[1]);
      if (func_get_arg(0)!=LOG_INFO&&func_get_arg(0)!=LOG_NOTICE)
      { 
-       $trace=debug_backtrace()[0];
+       $backtrace=debug_backtrace();
+       $trace=$backtrace[0];
        $vargs=array_merge($args,array($trace['file'],$trace['line']));
        $format=func_get_arg(1);
        $format=preg_replace("/\n$/","",$format);

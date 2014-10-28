@@ -5,6 +5,44 @@ require_once("RFC822.php");
 require_once("Debug.php");
 
 
+class QueueIterator implements \Iterator {
+    private $position = 0;
+    private $msgs = array();  
+
+    public function __construct($queuemessage) {
+        $this->position = 0;
+        if (is_array($queuemessage)) $this->msgs=$queuemessage;
+    }
+
+    function rewind() {
+        $this->position = 0;
+    }
+
+    function count() {
+        return count($this->msgs);
+    }
+
+    function get($key) {
+        return $this->msgs[$key];
+    }
+
+    function current() {
+        return $this->msgs[$this->position];
+    }
+
+    function key() {
+        return $this->position;
+    }
+
+    function next() {
+        ++$this->position;
+    }
+
+    function valid() {
+        return isset($this->msgs[$this->position]);
+    }
+}
+
 class MailQueue
 {
   public $options = [];
@@ -12,6 +50,42 @@ class MailQueue
   public function __construct($options=null) 
   {
     $this->options=$options;
+  }
+
+  public function QueueCount($queue)
+  {
+     $base_dir=$this->options["queue_dir"]."/".$queue;
+     $count=0;
+     if (is_dir($base_dir)) 
+     {
+       // for each queue subdir 0-F
+       for($i=0;$i<15;$i++)
+       {
+	 $subdir=strtoupper(dechex($i));
+	 if (is_dir($base_dir."/".$subdir))
+	 {
+	   // list files in it
+	   if ($dh = opendir($base_dir."/".$subdir)) 
+	   {
+	     while (($file = readdir($dh)) !== false) 
+	     {
+	       $file_abs=$base_dir."/".$subdir."/".$file;
+	       // for each file that match /^[0-9A-Fa-f]{11}/ increment count
+	       if (filetype($file_abs) == "file"&&preg_match("/^[0-9A-Fa-f]{11}/",$file)==1)
+	       {
+		 //echo "fichier : $file_abs : type : " . filetype($file_abs) . "\n";
+		 $count++;
+	       }
+	     }
+	     closedir($dh);
+	   }
+	 }
+       }
+       //debug::printf(LOG_INFO,"QueueCount queue %s = %s\n",$queue,$count);
+       return $count;
+     }
+     debug::printf(LOG_ERR,"QueueCount queue <%s> not found !\n",$base_dir);
+     return -1;
   }
 
   public function makequeue($queue)
@@ -31,6 +105,165 @@ class MailQueue
         debug::exit_with_error(5,"Couldn't create subdir %s of queue %s\n",$subdir,$queue);
     }
 
+  }
+
+  public function browsequeue($queue)
+  {
+     $base_dir=$this->options["queue_dir"]."/".$queue;
+     $count=0;
+     $msg_list=array();
+
+     if (is_dir($base_dir)) 
+     {
+       // for each queue subdir 0-F
+       for($i=0;$i<15;$i++)
+       {
+	 $subdir=strtoupper(dechex($i));
+	 if (is_dir($base_dir."/".$subdir))
+	 {
+	   // list files in it
+	   if ($dh = opendir($base_dir."/".$subdir)) 
+	   {
+	     while (($file = readdir($dh)) !== false) 
+	     {
+	       $file_abs=$base_dir."/".$subdir."/".$file;
+	       // for each file that match /^[0-9A-Fa-f]{11}/ increment count
+	       if (filetype($file_abs) == "file"&&preg_match("/^[0-9A-Fa-f]{11}/",$file)==1)
+	       {
+		 try 
+		 {
+		   $fd=fopen($file_abs,"r");
+		   if ($fd===false)
+			 throw new SMTPException(LOG_ERR,"dequeue file %s unable to open!\n",$file_abs);
+
+		   // ne compte que les fichier marquer executable
+		   $stat=fstat($fd);
+		   if (($stat['mode']&0100)==64)
+		   {
+		     $message_info=$this->getEnveloppe($fd,$file_abs);
+		     if ($message_info==false) throw new SMTPException(LOG_ERR,"browsequeue getEnveloppe error on file %s !\n",$file_abs);
+		     $msg_list[$count++]=$message_info;
+		   }
+		 } catch(SMTPException $e) {
+		   $e->log();
+		   fclose($fd);
+		 }
+	       }
+	     }
+	     closedir($dh);
+	   }
+	 }
+       }
+       debug::printf(LOG_INFO,"browsequeue queue %s = %s\n",$queue,$count);
+       return array('size'=>$count,'msg_list'=>new QueueIterator($msg_list));
+     }
+     debug::printf(LOG_ERR,"browsequeue queue <%s> not found !\n",$base_dir);
+     return false;
+  }
+
+  public function getEnveloppe($fd,$file_abs)
+  {
+     try 
+     {
+       $file=basename($file_abs);
+
+       // read version
+       $version=fread($fd,16);
+       if ($version==false) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unable to read version!\n",$file_abs);
+       if (strncmp($version,"MSG_VERSION:01\r\n",16)!=0) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unknow version!\n",$file_abs);
+
+       // read enveloppe header to determine enveloppe size
+       $header_enveloppe=fread($fd,20);
+       if ($header_enveloppe==false) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unable to read header enveloppe!\n",$file_abs);
+       if (strncmp($header_enveloppe,"ENVELOPPE:",10)!=0)
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s header enveloppe not found !\n",$file_abs);
+       $enveloppe_lenght=intval(substr($header_enveloppe,10,8));
+       if ($enveloppe_lenght<=0)
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s header enveloppe size error (%s) !\n",$file_abs,$enveloppe_lenght);
+
+       // read enveloppe
+       $enveloppe=fread($fd,$enveloppe_lenght);
+       if ($enveloppe==false) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unable to read enveloppe!\n",$file_abs);
+       $enveloppe=unserialize($enveloppe);
+       if ($enveloppe==false) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unable unserialize enveloppe!\n",$file_abs);
+
+       // read data header to determine data size
+       $header_data=fread($fd,17);
+       if ($header_data==false) 
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s unable to read header data!\n",$file_abs);
+       if (strncmp($header_data,"DATA:",5)!=0)
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s header data not found !\n",$file_abs);
+       $data_lenght=intval(substr($header_data,5,10));
+       if ($data_lenght<=0)
+	     throw new SMTPException(LOG_ERR,"getEnveloppe file %s header enveloppe size error (%s) !\n",$file_abs,$enveloppe_lenght);
+
+       $message["message_id"]=$file;
+       $message["file"]=$file_abs;
+       $message["enveloppe"]=$enveloppe;
+       $message["enveloppe_size"]=$enveloppe_lenght;
+       $message["data_size"]=$data_lenght;
+       return $message;
+     } catch(SMTPException $e) {
+       $e->log();
+       return false;
+     }
+  }
+
+  public function dequeue($queue,$msgid,$remove=false)
+  {
+     $base_dir=$this->options["queue_dir"]."/".$queue;
+     if (is_dir($base_dir)) 
+     {
+       try 
+       {
+	 $subdir=$base_dir."/".substr($msgid,0,1);
+	 if (!is_dir($base_dir))
+	     throw new SMTPException(LOG_ERR,"dequeue directory %s not found!\n",$subdir);
+
+	 $file_abs=$subdir."/".$msgid;
+	 if (!file_exists($file_abs)) 
+	     throw new SMTPException(LOG_ERR,"dequeue file %s not found!\n",$file_abs);
+
+	 $fd=fopen($file_abs,"r+");
+	 if ($fd===false)
+	     throw new SMTPException(LOG_ERR,"dequeue file %s unable to open!\n",$file_abs);
+
+	 if (!flock($fd, LOCK_EX)) 
+	     throw new SMTPException(LOG_ERR,"dequeue file %s unable lock!\n",$file_abs);
+	 if (!chmod($file_abs,0600))
+	     throw new SMTPException(LOG_ERR,"dequeue chmod u-x of %s error!\n",$file_abs);
+
+	 $message_enveloppe=$this->getEnveloppe($fd,$file_abs);
+	 if ($message_enveloppe==false) 
+	     throw new SMTPException(LOG_ERR,"dequeue getEnveloppe error on file %s!\n",$file_abs);
+
+	 $data=fread($fd,$message_enveloppe['data_size']);
+	 if ($data==false)
+	     throw new SMTPException(LOG_ERR,"dequeue file %s unable to read header data!\n",$file_abs);
+	 if ($remove==true)
+	 {
+	   if (!unlink($file_abs)) 
+	     throw new SMTPException(LOG_ERR,"dequeue unable to remove file %s!\n",$file_abs);
+	 }
+
+       } catch(SMTPException $e) {
+	 $e->log();
+	 @flock($fd, LOCK_UN);
+	 @fclose($fd);
+	 return false;
+       }
+       flock($fd, LOCK_UN);
+       fclose($fd);
+       return array('message_enveloppe'=>$message_enveloppe,
+		    'message_data'=>$data);
+     }
+     debug::printf(LOG_ERR,"browsequeue queue <%s> not found !\n",$base_dir);
+     return false;
   }
 
   public function enqueue($queue,$enveloppe,$data)
@@ -59,13 +292,13 @@ class MailQueue
       if ($enveloppe['clientDataLen']>9999999999) 
 	 new SMTPException(LOG_ERR,"enqueue Message data size to long %s\n",$enveloppe_len);
 
-    } catch(Exception $e) {
+    } catch(SMTPException $e) {
       $e->log();
       umask($oldumask);
       return false;
     }
 
-    debug::printf(LOG_NOTICE,"enqueue message enquing to file %s\n",$file);
+    debug::printf(LOG_NOTICE,"enqueue message enqueing to tempory file %s\n",$file);
     try 
     {
       $fp = fopen($file,"w+");
@@ -106,9 +339,10 @@ class MailQueue
 	unlink($newfilename);
 	throw new SMTPException(LOG_ERR,"enqueue chmod error\n");
       }
-      debug::printf(LOG_NOTICE,"enqueue message file enqueued to %s\n",$newfilename);
+      debug::printf(LOG_NOTICE,"enqueue message completly writen to tempory file %s...\n",$file);
+      debug::printf(LOG_NOTICE,"enqueue ... renamed to %s\n",$newfilename);
 
-    } catch(Exception $e) {
+    } catch(SMTPException $e) {
       $e->log();
       fclose($fp);
       unlink($file);
