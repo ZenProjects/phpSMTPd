@@ -95,6 +95,7 @@ http://daemon.io/
   = QUIT close the connection after sending bye message
 
 ### To use/test STARTLS:
+
   1) Prepare cert.pem certificate and privkey.pem private key files.
      http://rene.bz/setting-smtp-authentication-over-tls-postfix/
      http://www.postfix.org/TLS_README.html
@@ -131,24 +132,35 @@ http://daemon.io/
 ## ESMTP Extension implementation status:
 
 - 8BITMIME, client/server done partial
+
   http://cr.yp.to/smtp/8bitmime.html
   https://tools.ietf.org/html/rfc6152
+
 - STARTLS, client/server done
+
   http://en.wikipedia.org/wiki/STARTTLS
   https://tools.ietf.org/html/rfc3207
+
 - SIZE, client/server done partial
+
   http://cr.yp.to/smtp/size.html
   http://tools.ietf.org/html/rfc1870
+
 - XCLIENT, client/server done
+
   http://www.postfix.org/XCLIENT_README.html
+
 - XFORWARD, client/server done
+
   http://www.postfix.org/XFORWARD_README.html
 
 - PIPELINING, not done but planned
+
   http://tools.ietf.org/html/rfc2920
   http://cr.yp.to/smtp/pipelining.html
 
 - SMTP-AUTH, not done, planned CRAM-MD5, PLAIN only
+  
   http://tools.ietf.org/html/rfc4954 ==> SMTP AUTH are based on SASL
   http://www.fehcom.de/qmail/smtpauth.html ==> extension for qmail, good starting point
   http://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml ==> list of SASL mecanismes
@@ -163,28 +175,28 @@ http://daemon.io/
 
 - TLS DANE, not done, planned
 
-...https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13
-...https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/
-...http://www.postfix.org/TLS_README.html#client_tls_dane
+  https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13
+  https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/
+  http://www.postfix.org/TLS_README.html#client_tls_dane
 
 - ENHANCEDSTATUSCODES, not done posibly planned
 
-...http://tools.ietf.org/html/rfc2034 ==> the extension
-...http://tools.ietf.org/html/rfc3463 ==> List of Enhanced Mail System Status Codes
-...http://tools.ietf.org/html/rfc1894 ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
+  http://tools.ietf.org/html/rfc2034 ==> the extension
+  http://tools.ietf.org/html/rfc3463 ==> List of Enhanced Mail System Status Codes
+  http://tools.ietf.org/html/rfc1894 ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
 
 - SMTPUTF8, not done, not planned
 
-...http://www.postfix.org/SMTPUTF8_README.html
-...http://tools.ietf.org/html/rfc6531 ==> the SMTPUTF8 extension
-...http://tools.ietf.org/html/rfc6532 ==> Internationalized Email Headers
-...http://tools.ietf.org/html/rfc6533 ==> Internationalized Delivery Status and Disposition Notifications
+  http://www.postfix.org/SMTPUTF8_README.html
+  http://tools.ietf.org/html/rfc6531 ==> the SMTPUTF8 extension
+  http://tools.ietf.org/html/rfc6532 ==> Internationalized Email Headers
+  http://tools.ietf.org/html/rfc6533 ==> Internationalized Delivery Status and Disposition Notifications
 
 - DSN, not done, not planned
 
-...http://tools.ietf.org/html/rfc3461
+  http://tools.ietf.org/html/rfc3461
 
 - CHUNKING, not done, not planned
 
-...http://tools.ietf.org/html/rfc3030
+  http://tools.ietf.org/html/rfc3030
 
