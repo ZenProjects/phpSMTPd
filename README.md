@@ -136,9 +136,6 @@ http://daemon.io/
 
   http://tools.ietf.org/html/rfc5322
 
-  SMTP Update 12
-  https://tools.ietf.org/html/draft-ietf-drums-smtpupd-12
-
   SMTP Extension | RFC | Description
   --- | --- | ---
   SIZE 			| 1870 | SMTP Service Extension for Message Size Declaration
