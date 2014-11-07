@@ -8,13 +8,16 @@ Server part are Multiprocess pre-forked daemon.
 They can start as root listen on port <1025 and impersonate to other user.
 
 Largely based on D.J. Berstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
-- http://cr.yp.to/smtp/helo.html 	==> HELO, RSET, and NOOP verbs
-- http://cr.yp.to/smtp/ehlo.html 	==> EHLO verb
-- http://cr.yp.to/smtp/mail.html 	==> MAIL, RCPT, and DATA verbs
-- http://cr.yp.to/smtp/quit.html 	==> QUIT verb
-- http://cr.yp.to/smtp/vrfy.html 	==> VRFY/EXPN verbs
-- http://cr.yp.to/smtp/8bitmime.html 	==> 8BITMIME extension
-- http://cr.yp.to/smtp/size.html	==> SIZE extension
+
+| Links                              | SMTP verbs                  |
+| ---------------------------------- | --------------------------- |
+| http://cr.yp.to/smtp/helo.html     | HELO, RSET, and NOOP verbs  |
+| http://cr.yp.to/smtp/ehlo.html     | EHLO verb                   |
+| http://cr.yp.to/smtp/mail.html     | MAIL, RCPT, and DATA verbs  |
+| http://cr.yp.to/smtp/quit.html     | QUIT verb                   |
+| http://cr.yp.to/smtp/vrfy.html     | VRFY/EXPN verbs             |
+| http://cr.yp.to/smtp/8bitmime.html | 8BITMIME extension          |
+| http://cr.yp.to/smtp/size.html     | SIZE extension              |
 
 The skelete of the server part are based on SMTP event based example on php site by Andrew Rose :
 http://php.net/manual/fr/event.examples.php
@@ -35,23 +38,26 @@ http://daemon.io/
 
 ### SMTP Client Implementation detail:
 
-  //////////// HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
-  = EHLO are sent systematicly (as say djb), and HELO only if $this->forceehlo is set to false and the SERVER not responded ESMTP in gretting
-  = NOTE: possible amelioration is to send HELO in case of error with EHLO for server that not support ESMTP.
-  = abort if SIZE receved form the server are larger than data message
-  = send xclient/xforward information if the server support it
-  = Transmit all XCLIENT attributs ($this->xclients array, it not set send [UNAVAILABLE]) found in XCLIENT EHLO response...
-  = Transmit all XFORWARD attributs ($this->xforwards array, it not set send [UNAVAILABLE]) found in XFORWARD EHLO response...
-  = STARTLS if the server claim to support it and the $this->tls attribut is set
+#### HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
 
-  ///////////// MAIL, RCPT and DATA verbs
-  = all are implemented
-  = not SIZE option on MAIL cmd for the moment...
-  = no Q-P conversion (for the moment, but in regard of djb note are not needed anymore...), send 8bit for all server even if the server not specify 8BITMIME in EHLO
+  - EHLO are sent systematicly (as say djb), and HELO only if $this->forceehlo is set to false and the SERVER not responded ESMTP in gretting
+  - NOTE: possible amelioration is to send HELO in case of error with EHLO for server that not support ESMTP.
+  - abort if SIZE receved form the server are larger than data message
+  - send xclient/xforward information if the server support it
+  - Transmit all XCLIENT attributs ($this->xclients array, it not set send [UNAVAILABLE]) found in XCLIENT EHLO response...
+  - Transmit all XFORWARD attributs ($this->xforwards array, it not set send [UNAVAILABLE]) found in XFORWARD EHLO response...
+  - STARTLS if the server claim to support it and the $this->tls attribut is set
 
-  //////////// QUIT verb
-  = send quit, wait response and close connection
-  = NOTE: possible amelioration is to not wait response... like qmail client
+#### MAIL, RCPT and DATA verbs
+
+  - all are implemented
+  - not SIZE option on MAIL cmd for the moment...
+  - no Q-P conversion (for the moment, but in regard of djb note are not needed anymore...), send 8bit for all server even if the server not specify 8BITMIME in EHLO
+
+#### QUIT verb
+
+  - send quit, wait response and close connection
+  - NOTE: possible amelioration is to not wait response... like qmail client
 
 ## for the SMTP Server
 
@@ -61,7 +67,8 @@ http://daemon.io/
 
 ### SMTP Client Implementation detail:
 
-  //////////// HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
+#### HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
+
   = support EHLO and HELO
   = HELO not send extension like EHLO does
   = send extension SIZE (send server configured maximum message size), 8BITMIME, VRFY as default
@@ -69,7 +76,8 @@ http://daemon.io/
   = send STARTTLS extension if configuration enabeled
   = check resolvabilty of the hostname sended
 
-  ///////////// MAIL, RCPT and DATA verbs
+#### MAIL, RCPT and DATA verbs
+
   = all are implemented
   = MAIL and RCPT controle the address format
   = RCPT controle if the destination are configured Mailling List
@@ -77,15 +85,16 @@ http://daemon.io/
   = SIZE option on MAIL cmd are supported, and abort if the size is larger the server configured maximum.
   = no Q-P conversion, full 8BITMIME server. 
 
-  //////////// VRFY, NOOP, RSET
+#### VRFY, NOOP, RSET
+
   = VRFY controle if the addresse are configured as mailing list
   = NOOP do noop...
   = RSET reset the enveloppe and restart sequencing to after EHLO/HELO
 
-  //////////// QUIT verb
+#### QUIT verb
   = QUIT close the connection after sending bye message
 
-To use/test STARTLS:
+### To use/test STARTLS:
   1) Prepare cert.pem certificate and privkey.pem private key files.
      http://rene.bz/setting-smtp-authentication-over-tls-postfix/
      http://www.postfix.org/TLS_README.html
@@ -153,21 +162,24 @@ To use/test STARTLS:
   ==> for use with authenticated relay (not for public mx relay)
 
 - TLS DANE, not done, planned
-  https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13
-  https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/
-  http://www.postfix.org/TLS_README.html#client_tls_dane
+
+..(https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13)
+..(https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/)
+..(http://www.postfix.org/TLS_README.html#client_tls_dane)
+
 - ENHANCEDSTATUSCODES, not done posibly planned
-  http://tools.ietf.org/html/rfc2034 ==> the extension
-  http://tools.ietf.org/html/rfc3463 ==> List of Enhanced Mail System Status Codes
-  http://tools.ietf.org/html/rfc1894 ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
+
+..(http://tools.ietf.org/html/rfc2034) ==> the extension
+..(http://tools.ietf.org/html/rfc3463) ==> List of Enhanced Mail System Status Codes
+..(http://tools.ietf.org/html/rfc1894) ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
 
 - SMTPUTF8, not done, not planned
-  http://www.postfix.org/SMTPUTF8_README.html
-  http://tools.ietf.org/html/rfc6531 ==> the SMTPUTF8 extension
-  http://tools.ietf.org/html/rfc6532 ==> Internationalized Email Headers
-  http://tools.ietf.org/html/rfc6533 ==> Internationalized Delivery Status and Disposition Notifications
+  (http://www.postfix.org/SMTPUTF8_README.html)
+  (http://tools.ietf.org/html/rfc6531) ==> the SMTPUTF8 extension
+  (http://tools.ietf.org/html/rfc6532) ==> Internationalized Email Headers
+  (http://tools.ietf.org/html/rfc6533) ==> Internationalized Delivery Status and Disposition Notifications
 - DSN, not done, not planned
-  http://tools.ietf.org/html/rfc3461
+  (http://tools.ietf.org/html/rfc3461)
 - CHUNKING, not done, not planned
-  http://tools.ietf.org/html/rfc3030
+  (http://tools.ietf.org/html/rfc3030)
 
