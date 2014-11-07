@@ -1,0 +1,66 @@
+; processus name
+daemon_processname = "SuperListdaemon"
+; syslog processus name
+daemon_syslogname = "SuperListd"
+
+; listen <host>:<port>
+listen = 127.0.0.1:2025
+
+; overide systeme hostname for SMTP hello hostname
+;hostname = "hostname"
+
+; deferent protocol size limit
+; loop max read = 256ko
+maxRead = 256*1024 
+;http://tools.ietf.org/html/rfc1869#section-4.1.2 = 
+;512 + BODY=8BITMIME : 5+8+1=14 + SIZE=01234567890123456789 : 5+20+1=26 = 552
+maxcommandlinesize = 512+14+26 
+maxmessagesize = 15*1024*1024
+
+; automaticaly calculed base on nproc, but you can overide here
+;max_workers = 2
+
+log_level= LOG_DEBUG
+
+; mail queue dir (must be owned by user parametter)
+queue_dir = /path/to/queue/basedir
+queue_max_msg = 20000
+queue_min_msg = 17000
+
+; ipc key name
+ipc_sem = scoreboard_sem
+ipc_shm = scoreboard
+ipc_shm_size = 10*1024*1024
+
+
+; user used when started from root
+user = superlistd
+
+; smtp extensions
+xclient = false
+xforward = false
+tls = false
+crlf = false
+
+; read/write timout in secondes
+read_timeout = 300 
+write_timeout = 300
+
+; the pid file for listen mode
+pidfile = /var/run/superlistd.pid
+
+; ssl context option for starttls extension
+[sslctx]
+ssl_server_crt  	= /path/to/hostname.certificat.chained.crt
+ssl_server_key  	= /path/to/hostname.privatekey.key
+;ssl_passphrase  	= 
+ssl_verify_peer 	= false 
+ssl_allow_self_signed 	= true 
+ssl_no_sslv2	 	= true 
+ssl_no_sslv3	 	= true 
+ssl_no_tlsv1	 	= true 
+
+[listes]
+mylist@mydomain.tld[]=address1@example1.com
+mylist@mydomain.tld[]=address2@example2.com
+
