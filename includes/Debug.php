@@ -34,6 +34,7 @@ class SMTPException extends \Exception
 
   public function log()
   {
+   if ($this->LogLevel>Debug::$loglevel) return;
     syslog($this->LogLevel,$this->message);
   }
 
@@ -45,12 +46,15 @@ class SMTPException extends \Exception
 
 class Debug
 {
+  public static $loglevel = LOG_DEBUG;
+
   public function open($logname="SuperListd",$syslog_flag=LOG_PID,$syslog_facility=LOG_MAIL) 
   {
       openlog($logname, $syslog_flag, LOG_MAIL);
   }
   static function exit_with_error($arg)
   {
+     if (LOG_ERR>Debug::$loglevel) return;
      /*
      print("\n");
      debug_print_backtrace();
@@ -71,6 +75,7 @@ class Debug
 
   static function print_r($log_level,$array)
   {
+     if ($log_level>Debug::$loglevel) return;
      syslog($log_level,print_r($array,true));
   }
 
@@ -86,6 +91,7 @@ class Debug
      $args=func_get_args();
      unset($args[0]);
      unset($args[1]);
+     if (func_get_arg(0)>Debug::$loglevel) return;
      if (func_get_arg(0)!=LOG_INFO&&func_get_arg(0)!=LOG_NOTICE)
      { 
        $backtrace=debug_backtrace();

@@ -1,16 +1,25 @@
 #!/opt/srv/php/bin/php
-<?php
+<?php 
 namespace SuperListd;
 
 // search base installation dir
-$basedir=preg_replace("/\/sbin(\/\.)*$/","",dirname($argv[0]));
-if (!chdir($basedir))
+$basedir=preg_replace("/(\/)*sbin(\/\.)*$/","",dirname($argv[0]));
+if ($basedir!="")
 {
-  fprintf(STDERR,"Base Directory find %s ar not directory or accesible !\n",$basedir);
-  exit(1);
+  if (!@chdir($basedir))
+  {
+    fprintf(STDERR,"Base Directory found <%s> ar not directory or accesible !\n",$basedir);
+    exit(1);
+  }
 }
 $basedir=getcwd();
-//fprintf(STDERR,"Basedir found:%s\n",$basedir);
+
+if (!is_dir($basedir."/includes"))
+{
+  fprintf(STDERR,"The include path determined <%s/includes> are not a directory!!!!\n",$basedir);
+  fprintf(STDERR,"Error cannot determine where the daemon is installed, cannot start daemon!!!!\n");
+  exit(-1);
+}
 
 // set include path based on basedir
 set_include_path(get_include_path() . PATH_SEPARATOR . $basedir."/includes");

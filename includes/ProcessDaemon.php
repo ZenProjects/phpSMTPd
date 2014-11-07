@@ -41,6 +41,7 @@ abstract class ProcessDaemon
      $this->basedir=$basedir;
      $this->config_file=$this->basedir . "/config/".$defaultconfig;
      debug::open($defaultdaemonname,LOG_PID|LOG_PERROR);
+     Debug::$loglevel=LOG_WARNING;
   }
 
   public function main($argc,$argv)
@@ -92,23 +93,23 @@ abstract class ProcessDaemon
     gc_enable();
 
     //////////////////////////
-    // fork and daemonize
-    //////////////////////////
-    if (isset($this->options["daemonize"])) $this->daemonize();
-    $this->callHook("Daemonize",array($this));
-
-    //////////////////////////
-    // start banner
-    //////////////////////////
-    debug::printf(LOG_NOTICE, "Starting %s Serveur pid:%s at <%s>\n",$this->options['daemon_processname'],posix_getpid(),gmdate('r'));
-
-    //////////////////////////
     // reopen syslog with perror if args stderr is set
     //////////////////////////
     if (isset($options["stderr"]))
        debug::open($this->options['daemon_syslogname'],LOG_PID|LOG_PERROR);
     else
        debug::open($this->options['daemon_syslogname'],LOG_PID);
+
+    //////////////////////////
+    // start banner
+    //////////////////////////
+    debug::printf(LOG_NOTICE, "Starting %s Serveur pid:%s listen:%s at <%s>\n",$this->options['daemon_processname'],posix_getpid(),$this->options['listen'],gmdate('r'));
+
+    //////////////////////////
+    // fork and daemonize
+    //////////////////////////
+    if (isset($this->options["daemonize"])) $this->daemonize();
+    $this->callHook("Daemonize",array($this));
 
     //////////////////////////
     // run daemon
@@ -292,6 +293,19 @@ abstract class ProcessDaemon
         $this->options['pidfile']=$args["pidfile"]; 
       }
 
+      if (isset($this->options["log_level"]))
+      {
+	 ob_start();
+         $loglevel=@eval("return ".$this->options["log_level"].";");
+	 $output = ob_get_contents();
+	 ob_end_clean();
+	 if ($loglevel<0||$loglevel>LOG_DEBUG||!is_int($loglevel))
+	 {
+	   debug::printf(LOG_ERR, "Loglevel <%s> not known!",$this->options["log_level"]);
+	   $this->syntax($args);
+	 }
+	 Debug::$loglevel=$loglevel;
+      }
       if (isset($this->options["maxworker"]))
       {
          $this->maxworker=$this->options["maxworker"];

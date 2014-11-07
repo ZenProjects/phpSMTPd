@@ -43,6 +43,7 @@ class SMTPListener
 	if (!$this->listener = new EventListener($this->base,
 						 [$this, 'ev_accept'],
 						 $this,
+						 //EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE,
 						 EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE,
 						 -1,
 						 $connect_string))
@@ -120,9 +121,18 @@ class SMTPListener
   {
      $errno = EventUtil::getLastSocketErrno();
 
+	/*
+	     Errno 11 = EAGAIN or EWOULDBLOCK
+		 The socket is marked non-blocking and the receive operation would block, or a receive timeout had been set and the timeout expired before data was received.  POSIX.1-2001 allows either error to
+		 be returned for this case, and does not require these constants to have the same value, so a portable application should check for both possibilities.	   
+
+             Errno 104 = ECONNRESET
+	     	 Connection reset by peer
+
+	*/
      if ($errno == 11 || $errno == 104) 
      {
-	debug::printf(LOG_DEBUG,"Client disconection detected\n");
+	debug::printf(LOG_DEBUG,"Listener Client disconection detected\n");
 	$fd=$ctx->listener->fd;
 	foreach($ctx->connections as $key => $value)
 	{
@@ -130,7 +140,7 @@ class SMTPListener
 	   if ($value->cnx->fd == $fd)
 	   {
 	     $address=$ctx->connections[$key]->cnx->address;
-	     debug::printf(LOG_NOTICE, "Client has disconected %s:%s\n",$address[0],$address[1]);
+	     debug::printf(LOG_NOTICE, "Listener Client has disconected %s:%s\n",$address[0],$address[1]);
 
 	     //debug::print_r(LOG_DEBUG,$value);
 	     $ctx->connections[$key]->cnx->ev_close($ctx->connections[$key]->cnx);

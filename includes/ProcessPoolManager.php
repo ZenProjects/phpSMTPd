@@ -21,11 +21,12 @@ trait EventTools
      $event = new Event($base, $fd, $flags, array($this, $callback), $this);
      // to catch notice :
      // PHP Notice:  Event::add(): Added a signal to event base 0x1dadf30 with signals already added to event_base 0x1da4ec0.  Only one can have signals at a time with the epoll backend. 
-     ob_start(); 
+     // must be corrected in adding event_base free method
+     //ob_start(); 
      if ($timeout==-1) $event->add();
      else $event->add($timeout);
-     $output = ob_get_contents();
-     ob_end_clean();
+     //$output = ob_get_contents();
+     //ob_end_clean();
      $this->events[ $name ] = $event;
   }
 }
@@ -482,20 +483,22 @@ class EventProcessPoolManager
 	{
 	  debug::exit_with_error(ExitStatus::EventBaseReInit,"Error EventBase reInit!\n");
 	}
-	// and dismantles the whole event structure
-	foreach ( $this->events as $i => $event ) 
-	{
-	  $event->del();
-	  $event->free();
-	  unset($this->events[$i]);
-	}
 
-	// try to free eventbase
-	$this->base=null;
-	unset($this->base);
+	// and dismantles the whole event structure
+	foreach ( $this->events as $i => &$event ) 
+	{
+	  //$event->del();
+	  $event->free();
+	  unset($events);
+	}
 
 	// start gc collect cycles to free free reference
 	if(gc_enabled()) gc_collect_cycles();
+
+	// try to free eventbase
+	if (method_exists($this->base,"free")) $this->base->free();
+	$this->base=null;
+	unset($this->base);
 
         $this->callHook("childDropPrivilege",array($this,$worker));
 	// drop root privilege and setuid/gid privilege of the user

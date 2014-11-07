@@ -7,9 +7,11 @@ require_once("ProcessDaemon.php");
 require_once("SMTPListener.php");
 require_once("SMTPProtocol.php");
 require_once("MailQueue.php");
+require_once("SSL.php");
 
 use EventSslContext;
 use EventBase;
+use EventUtil;
 use Event;
  /*
  * Author: Mathieu CARBONNEAUX 
@@ -98,14 +100,84 @@ class SMTPDaemon extends ProcessDaemon
       if (isset($args["tls"]))
       {
          $this->options['tls']=true;
-	 // prepare sslctx for starttls smtp extension
-	 $this->options['sslctx'] = new EventSslContext(EventSslContext::SSLv3_SERVER_METHOD, array(
+
+	 if (!isset($this->options['sslctx']))
+	     debug::exit_with_error(101,"tls enabled but sslctx in config file not set!\n");
+
+	 if (!file_exists($this->options['sslctx']['ssl_server_crt'])||!file_exists($this->options['sslctx']['ssl_server_key']))
+	     debug::exit_with_error(101,"Couldn't read %s or %s file.\n",$this->options['sslctx']['ssl_server_crt'],$this->options['sslctx']['ssl_server_key']);
+
+	 // We *must* have entropy. Otherwise there's no point to crypto.
+	 if (!EventUtil::sslRandPoll()) 
+	     debug::exit_with_error(101,"EventUtil::sslRandPoll failed\n");
+
+	 $sslcontext_options = array(
 	     EventSslContext::OPT_LOCAL_CERT  => $this->options['sslctx']['ssl_server_crt'],
+	     //EventSslContext::OPT_CA_FILE  => '/etc/ssl/ca.crt',
+	     //EventSslContext::OPT_CA_PATH  => '/etc/ssl/',
 	     EventSslContext::OPT_LOCAL_PK    => $this->options['sslctx']['ssl_server_key'],
-	     //EventSslContext::OPT_PASSPHRASE  => $this->options['sslctx']['ssl_passphrase'],
-	     EventSslContext::OPT_VERIFY_PEER => $this->options['sslctx']['ssl_verify_peer'],
-	     EventSslContext::OPT_ALLOW_SELF_SIGNED => $this->options['sslctx']['ssl_allow_self_signed'],
-	 ));
+	     // https://wiki.mozilla.org/Security/Server_Side_TLS - Intermediate compatibility cipher ==> TLSv1, TLSv1.1, TLSv1.2 only
+	     EventSslContext::OPT_CIPHERS  => SSL::DEFAULT_CIPHERS_INTERMEDIATE,
+	     EventSslContext::OPT_VERIFY_PEER => false, // per default not controle client certificate
+	     EventSslContext::OPT_ALLOW_SELF_SIGNED => true, // per default not accepte self signed server certificate
+	     EventSslContext::OPT_CIPHER_SERVER_PREFERENCE => true, // force the client to use of ciphers of the server
+	 );
+
+	 if (isset($this->options['sslctx']['ssl_cipher_server_preference']))
+	            $sslcontext_options[EventSslContext::OPT_CIPHER_SERVER_PREFERENCE]=$this->options['sslctx']['ssl_cipher_server_preference'];
+
+	 if (isset($this->options['sslctx']['ssl_ciphers']))
+	            $sslcontext_options[EventSslContext::OPT_CIPHERS]=$this->options['sslctx']['ssl_ciphers'];
+
+	 if (isset($this->options['sslctx']['ssl_passphrase']))
+	            $sslcontext_options[EventSslContext::OPT_PASSPHRASE]=$this->options['sslctx']['ssl_passphrase'];
+
+	 if (isset($this->options['sslctx']['ssl_no_sslv2'])&&$this->options['sslctx']['ssl_no_sslv2']===true)
+	            $sslcontext_options[EventSslContext::OPT_NO_SSLv2]=$this->options['sslctx']['ssl_no_sslv2'];
+
+	 if (isset($this->options['sslctx']['ssl_no_sslv3'])&&$this->options['sslctx']['ssl_no_sslv3']===true)
+	            $sslcontext_options[EventSslContext::OPT_NO_SSLv3]=$this->options['sslctx']['ssl_no_sslv3'];
+
+	 if (isset($this->options['sslctx']['ssl_no_tlsv1'])&&$this->options['sslctx']['ssl_no_tlsv1']===true)
+	            $sslcontext_options[EventSslContext::OPT_NO_TLSv1]=$this->options['sslctx']['ssl_no_tlsv1'];
+
+	 if (isset($this->options['sslctx']['ssl_no_tlsv1_1'])&&$this->options['sslctx']['ssl_no_tlsv1_1']===true)
+	            $sslcontext_options[EventSslContext::OPT_NO_TLSv1_1]=$this->options['sslctx']['ssl_no_tlsv1_1'];
+
+	 if (isset($this->options['sslctx']['ssl_no_tlsv1_2'])&&$this->options['sslctx']['ssl_no_tlsv1_2']===true)
+	            $sslcontext_options[EventSslContext::OPT_NO_TLSv1_2]=$this->options['sslctx']['ssl_no_tlsv1_2'];
+
+	 if (isset($this->options['sslctx']['ssl_allow_self_signed'])&&$this->options['sslctx']['ssl_allow_self_signed']===true)
+	            $sslcontext_options[EventSslContext::OPT_ALLOW_SELF_SIGNED]=$this->options['sslctx']['ssl_allow_self_signed'];
+
+	 if (isset($this->options['sslctx']['ssl_verify_peer'])&&$this->options['sslctx']['ssl_verify_peer']===true)
+	 {
+	     debug::printf(LOG_INFO, "Verify Peer options set!\n");
+	     $sslcontext_options[EventSslContext::OPT_VERIFY_PEER]=$this->options['sslctx']['ssl_verify_peer'];
+
+	     if (isset($this->options['sslctx']['ssl_ca_file']))
+	     {
+		if (!file_exists($this->options['sslctx']['ssl_ca_file']))
+		    debug::exit_with_error(101,"Couldn't read the CA File %s.\n",$this->options['sslctx']['ssl_ca_file']);
+		$sslcontext_options[EventSslContext::OPT_CA_FILE]=$this->options['sslctx']['ssl_ca_file'];
+	     }
+
+	     if (isset($this->options['sslctx']['ssl_ca_path']))
+	     {
+		if (!is_dir($this->options['sslctx']['ssl_ca_path']))
+		    debug::exit_with_error(101,"CA Path %s must be a valide directory.\n",$this->options['sslctx']['ssl_ca_path']);
+		$sslcontext_options[EventSslContext::OPT_CA_PATH]=$this->options['sslctx']['ssl_ca_path'];
+	     }
+
+	     if (isset($this->options['sslctx']['ssl_verify_depth']))
+			$sslcontext_options[EventSslContext::OPT_VERIFY_DEPTH]=$this->options['sslctx']['ssl_verify_depth'];
+	 }
+
+	 // prepare sslctx for starttls smtp extension
+	 $this->options['sslctx']['context'] = new EventSslContext(EventSslContext::SSLv23_SERVER_METHOD, $sslcontext_options);
+	 //$this->options['sslctx']['context'] = new EventSslContext(EventSslContext::TLSv11_SERVER_METHOD, $sslcontext_options);
+	 if (!$this->options['sslctx']['context'])
+	     debug::exit_with_error(101,"SslContext creation failed\n");
       }
 
       if (isset($args["crlf"]))

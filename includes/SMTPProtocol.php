@@ -12,15 +12,14 @@ use Event;
 use EventUtil;
 
  /*
- * Original Author: Andrew Rose <hello at andrewrose dot co dot uk>
  * Author: Mathieu CARBONNEAUX 
+ * based on original sample from Andrew Rose <hello at andrewrose dot co dot uk>
  *
- * Usage:
- * 1) Prepare cert.pem certificate and privkey.pem private key files.
- * 2) Launch the server script
- * 3) Open TLS connection, e.g.:
- *      $ openssl s_client -connect localhost:25 -starttls smtp -crlf
- * 4) Start testing the commands listed in `cmd` method below.
+ * Event based SMTP Server 
+ *
+ * Implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL FROM, RCPT TO, VRFY, NOOP, QUIT
+ * no HELP, SEND, SAML, SOML, TURN, ETRN verbs
+ * Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
  */
 
 class SMTPProtocol 
@@ -43,6 +42,9 @@ class SMTPProtocol
   public $read_timeout = 300; // 300s
   public $write_timeout = 300; // 300s
   public $id = false;
+  public $address = null;
+  public $fd = null;
+  public $tlsenabled = false;
 
   // smtp state machine constant
   const STATE_CONNECT = 1;
@@ -50,7 +52,10 @@ class SMTPProtocol
   const STATE_HEADER = 3;
   const STATE_DATA = 4;
 
-  public function __construct($base,$fd,$address=null,$options=null) 
+  private static $xforward_name = array("NAME","ADDR","PORT","PROTO","HELO","IDENT","SOURCE");
+  private static $xclient_name = array("NAME","ADDR","PROTO","HELO");
+
+  public function __construct(&$base,&$fd,$address=null,&$options=null) 
   {
       $this->base = $base;
       if (!$this->base) 
@@ -71,7 +76,7 @@ class SMTPProtocol
       if (isset($options['crlf'])) $this->crlf=$options['crlf'];
       if (isset($options['read_timeout'])) $this->read_timeout=$options['read_timeout'];
       if (isset($options['write_timeout'])) $this->write_timeout=$options['write_timeout'];
-      if (isset($options['sslctx'])) $this->sslctx=$options['sslctx'];
+      if (isset($options['sslctx']['context'])) $this->sslctx=$options['sslctx']['context'];
       if (isset($options['id'])) $this->id=$options['id'];
       if (isset($options['listener'])) $this->listener=$options['listener'];
 
@@ -120,16 +125,18 @@ class SMTPProtocol
 	  debug::exit_with_error(62,"no ssl context with tls option activated\n");
       }
 
-      if (!$this->cnx = new EventBufferEvent($this->base, $fd, EventBufferEvent::OPT_CLOSE_ON_FREE))
+      //if (!$this->cnx = new EventBufferEvent($this->base, $fd, EventBufferEvent::OPT_CLOSE_ON_FREE))
+      if (!$this->cnx = new EventBufferEvent($this->base, $fd))
       {
 	  $this->base->exit(NULL);
 	  debug::exit_with_error(63,"Couldn't create bufferevent\n");
       }
 
-      $this->clientData = '';
+      $this->fd = $fd;
       $this->state=self::STATE_CONNECT;
       $this->clientData = "";
       $this->clientDataLen = 0;
+      $this->tlsenabled = false;
       $this->cnx->setTimeouts($this->read_timeout,$this->write_timeout);
       $this->cnx->setCallbacks([$this, "ev_read"], NULL, [$this, 'ev_error'], $this);
       $this->cnx->enable(Event::READ);
@@ -153,8 +160,38 @@ class SMTPProtocol
      EventBufferEvent::TIMEOUT = 0x40
      EventBufferEvent::CONNECTED = 0x80
      */
-     if ($events & (EventBufferEvent::ERROR | 
-		   EventBufferEvent::TIMEOUT | EventBufferEvent::EOF | EventBufferEvent::CONNECTED))
+     if ($events & EventBufferEvent::CONNECTED)
+     {
+
+	if ($ctx->tlsenabled===true)
+	{
+	   debug::printf(LOG_NOTICE, "Cipher:%s\n",trim($buffer->sslGetCurrentCipher()));
+	   debug::printf(LOG_NOTICE, "CipherVersion:%s\n",$buffer->sslGetCurrentVersion());
+	   debug::printf(LOG_NOTICE, "CipherName:%s\n",$buffer->sslGetCurrentCipherName());
+	   debug::printf(LOG_NOTICE, "CipherProtocol:%s\n",$buffer->sslGetCurrentProtocol());
+	}
+
+	debug::printf(LOG_NOTICE, "Connected.\n");
+        return;
+     }
+
+     if ($events & EventBufferEvent::EOF)
+     {
+	$address=$ctx->address;
+	debug::printf(LOG_NOTICE, "The client %s:%s has been disconected on EOF\n",$address[0],$address[1]);
+	$ctx->ev_close($ctx);
+        return;
+     }
+
+     if ($events & EventBufferEvent::TIMEOUT)
+     {
+	$address=$ctx->address;
+	debug::printf(LOG_NOTICE, "The client %s:%s has timeouted\n",$address[0],$address[1]);
+	$ctx->ev_close($ctx);
+        return;
+     }
+
+     if ($events & EventBufferEvent::ERROR)
      {
 	$errno = EventUtil::getLastSocketErrno();
 
@@ -170,10 +207,10 @@ class SMTPProtocol
 	     	 Connection reset by peer
 
 	*/
-	if ($errno = 2 || $errno == 11 || $errno == 104) 
+	if ($errno == 2 || $errno == 11 || $errno == 104) 
 	{
 	    $address=$ctx->address;
-	    debug::printf(LOG_NOTICE, "The client %s:%s has disconected\n",$address[0],$address[1]);
+	    debug::printf(LOG_NOTICE, "The client %s:%s has disconected with errno:%s\n",$address[0],$address[1],$errno);
 	    $ctx->ev_close($ctx);
 	    return;
 	}
@@ -210,10 +247,23 @@ class SMTPProtocol
 	      * side; close it. */
 	     $ctx->cnx->disable(Event::READ | Event::WRITE);
 	     if ($drain) while($input_buffer->length > 0) $input_buffer->drain($ctx->maxRead);
+	     if (method_exists($ctx->cnx,"close")) $ctx->cnx->close();
+	     else bufferclose($ctx->cnx->fd);
 	     $ctx->cnx->free();
+	     unset($ctx->cnx);
 	     if (isset($ctx->listener->connections[$ctx->id])) unset($ctx->listener->connections[$ctx->id]);
 	     else exit(0);
        }
+  }
+
+  private function bufferclose($fd)
+  {
+      if ($bev = new EventBufferEvent($this->base, $fd, EventBufferEvent::OPT_CLOSE_ON_FREE))
+      {
+        debug::printf(LOG_DEBUG,"close %s\n",$fd);
+        $bev->free();
+	unset($bev);
+      }
   }
 
   public function ev_close_on_finished_writecb($buffer, $ctx) 
@@ -221,7 +271,11 @@ class SMTPProtocol
       if ($ctx->cnx->getOutput()->length==0)
       {
 	$ctx->cnx->disable(Event::READ | Event::WRITE);
+	//$ctx->bufferclose($ctx->cnx->fd);
+	if (method_exists($ctx->cnx,"close")) $ctx->cnx->close();
+	else bufferclose($ctx->cnx->fd);
 	$ctx->cnx->free(); 
+	unset($ctx->cnx);
 	if (isset($ctx->listener->connections[$ctx->id])) unset($ctx->listener->connections[$ctx->id]);
 	else exit(0);
       }
@@ -229,7 +283,7 @@ class SMTPProtocol
 
   protected function ev_write($ctx, $string) 
   {
-      debug::printf(LOG_NOTICE,'S('.$ctx->id.'): '.$string);
+      debug::printf(LOG_NOTICE,"S(%s) %s\n",$ctx->id,NetTool::toprintable($string));
       $ctx->cnx->write($string);
   }
 
@@ -257,7 +311,7 @@ class SMTPProtocol
 	    }
 	    $endofblock=substr($ctx->clientData,$ctx->clientDataLen-2);
 	    $endofblock1=substr($ctx->clientData,$ctx->clientDataLen-1);
-	    debug::printf(LOG_DEBUG,"endofblock:<%s> endofblock1:<%s>\n",urlencode($endofblock),urlencode($endofblock1));
+	    debug::printf(LOG_DEBUG,"endofblock:<%s> endofblock1:<%s>\n",NetTool::toprintable($endofblock),NetTool::toprintable($endofblock1));
 	    // read SMTP cmd<CRLF>
 	    if($endofblock == "\r\n"||($ctx->crlf&&$endofblock1 == "\n"))
 	    {
@@ -267,6 +321,7 @@ class SMTPProtocol
 		$ctx->clientData = '';
 	        $ctx->clientDataLen=0;
 		$this->SMTPcmd($buffer, $ctx, $line);
+		return;
 	    }
 	  }
 	  else
@@ -401,21 +456,50 @@ class SMTPProtocol
 
   protected function SMTPcmd($buffer, $ctx, $line) 
   {
-      debug::printf(LOG_NOTICE,'R('.$ctx->id.'): '.$line);
+      if (isset($ctx->listener->connections[$ctx->id])) 
+       $connexion_data=$ctx->listener->connections[$ctx->id];
+      else 
+       $connexion_data=$ctx;
+
+      debug::printf(LOG_NOTICE,"R(%s): %s\n",$ctx->id,NetTool::toprintable($line));
       switch ($line) 
       {
-	  case strncasecmp('EHLO ', $line, 5):
 	  case strncasecmp('HELO ', $line, 5):
-	      $this->ev_write($ctx, "250-".$ctx->hostname." offers many extensions\r\n");
+	      $helo_host=substr($line,5);
+	      if (NetTool::gethostbyname($helo_host)===false)
+	      {
+		$this->ev_write($ctx, "504 <".$helo_host.">: HELO command rejected: need fully-qualified hostname\r\n");
+		$this->ev_close($ctx);
+		break;
+	      }
+	      unset($ctx->enveloppe);
+	      $ctx->enveloppe['helo_host']=$helo_host;
+	      $ctx->enveloppe['helo_time']=microtime(true);
+
+	      $this->ev_write($ctx, "250 ".$ctx->hostname." is at your service\r\n");
+	      $ctx->state=self::STATE_HELO;
+	      break;
+
+	  case strncasecmp('EHLO ', $line, 5):
+	      $helo_host=substr($line,5);
+	      if (NetTool::gethostbyname($helo_host)===false)
+	      {
+		$this->ev_write($ctx, "504 <".$helo_host.">: EHLO command rejected: need fully-qualified hostname\r\n");
+		$this->ev_close($ctx);
+		break;
+	      }
+	      unset($ctx->enveloppe);
+	      $ctx->enveloppe['helo_host']=$helo_host;
+	      $ctx->enveloppe['helo_time']=microtime(true);
+
+	      $this->ev_write($ctx, "250-".$ctx->hostname." is at your service, [".$connexion_data->address[0]."]\r\n");
 	      $this->ev_write($ctx, "250-8BITMIME\r\n");
-	      if ($ctx->tls) $this->ev_write($ctx, "250-STARTTLS\r\n");
-	      if ($ctx->xclient) $this->ev_write($ctx, "250-XCLIENT NAME ADDR PORT HELO\r\n");
-	      if ($ctx->xforward) $this->ev_write($ctx, "250-XFORWARD NAME ADDR PORT PROTO HELO IDENT SOURCE\r\n");
+	      $this->ev_write($ctx, "250-VRFY\r\n");
+	      if ($ctx->tls&&$ctx->tlsenabled!==true) $this->ev_write($ctx, "250-STARTTLS\r\n");
+	      if ($ctx->xclient) $this->ev_write($ctx, "250-XCLIENT ".implode(" ",self::$xclient_name)."\r\n");
+	      if ($ctx->xforward) $this->ev_write($ctx, "250-XFORWARD ".implode(" ",self::$xforward_name)."\r\n");
 	      $this->ev_write($ctx, "250 SIZE ".$ctx->maxmessagesize."\r\n");
 	      $ctx->state=self::STATE_HELO;
-	      unset($ctx->enveloppe);
-	      $ctx->enveloppe['helo_host']=substr($line,5);
-	      $ctx->enveloppe['helo_time']=microtime(true);
 	      break;
 
 	  case strncasecmp('QUIT', $line, 4):
@@ -493,7 +577,6 @@ class SMTPProtocol
 		   {
 		     debug::printf(LOG_ERR,"Recipient %s rejected\n",$arr[1]);
 		     $this->ev_write($ctx, "550 Requested action not taken: mailbox unavailable\r\n");
-		     $this->ev_close($ctx);
 		     break;
 		   }
 		   $ctx->enveloppe['rcpt'][]=$arr[1];
@@ -543,6 +626,13 @@ class SMTPProtocol
 	      $this->ev_write($ctx, "250 OK noop\r\n");
 	      break;
 
+	  // http://www.postfix.org/XFORWARD_README.html
+	  // xforward-command = XFORWARD 1*( SP attribute-name"="attribute-value )
+	  // attribute-name = ( NAME | ADDR | PORT | PROTO | HELO | IDENT | SOURCE )
+	  // attribute-value = xtext
+	  // Attribute values are xtext encoded as per RFC 1891.
+	  //
+	  // i use NetTool::decode_xtext to decode XFORWARD arguments
 	  case strncasecmp('XFORWARD ', $line, 9):
 	      if (!$ctx->xforward) 
 	      {
@@ -557,38 +647,27 @@ class SMTPProtocol
 		break;
 	      }
 	      $xforward=substr($line,9);
-	      if (preg_match('/SOURCE=(\w*)/i', $xforward, $matchs)==1)
+              $xforward_attrsret=$this->xcmdheloargs_check($xforward,self::$xforward_name);
+	      if (is_array($xforward_attrsret))
 	      {
-                $ctx->enveloppe['xforward']['source']=$matchs[1]; 
+		$ctx->enveloppe['xforward']=array_merge($ctx->enveloppe['xforward'],$xforward_attrs);
+		debug::printf(LOG_NOTICE,"XFORWARD Attributs <%s> are valid!\n",$xforward);
+		$this->ev_write($ctx, "250 XFORWARD attribut are ok\r\n");
 	      }
-	      if (preg_match('/IDENT=(\w*)/i', $xforward, $matchs)==1)
+	      else
 	      {
-                $ctx->enveloppe['xforward']['ident']=$matchs[1]; 
+		debug::printf(LOG_NOTICE,"XFORWARD Error on <%s>, <%s> attribut not conform\n",$xforward,$xforward_attrsret);
+		$this->ev_write($ctx, "501 XFORWARD Error, <".$xforward_attrsret."> attribut not conform!\r\n");
 	      }
-	      if (preg_match('/HELO=(\w*)/i', $xforward, $matchs)==1)
-	      {
-                $ctx->enveloppe['xforward']['helo']=$matchs[1]; 
-	      }
-	      if (preg_match('/PROTO=(\w*)/i', $xforward, $matchs)==1)
-	      {
-                $ctx->enveloppe['xforward']['proto']=$matchs[1]; 
-	      }
-	      if (preg_match('/PORT=(\w*)/i', $xforward, $matchs)==1)
-	      {
-                $ctx->enveloppe['xforward']['port']=$matchs[1]; 
-	      }
-	      if (preg_match('/ADDR=(\w*)/i', $xforward, $matchs)==1)
-	      {
-                $ctx->enveloppe['xforward']['addr']=$matchs[1]; 
-	      }
-	      if (preg_match('/NAME=(\w*)/i', $xforward, $matchs)==1)
-	      {
-                $ctx->enveloppe['xforward']['name']=$matchs[1]; 
-	      }
-	      //debug::print_r(LOG_DEBUG,$ctx->xforward);
-	      debug::printf(LOG_NOTICE,"XFORWARD: <%s>\n",$xforward);
-	      $this->ev_write($ctx, "250 OK xforward\r\n");
 	      break;
+
+	  // http://www.postfix.org/XCLIENT_README.html
+	  // xclient-command = XCLIENT 1*( SP attribute-name"="attribute-value )
+	  // attribute-name = ( NAME | ADDR | PORT | PROTO | HELO | LOGIN )
+	  // attribute-value = xtext
+	  // Attribute values are xtext encoded as per RFC 1891.
+	  //
+	  // i use NetTool::decode_xtext to decode XFORWARD arguments
 	  case strncasecmp('XCLIENT ', $line, 8):
 	      if (!$ctx->xclient) 
 	      {
@@ -603,9 +682,18 @@ class SMTPProtocol
 		break;
 	      }
 	      $xclient=substr($line,8);
-	      $ctx->enveloppe['xclient']=$xclient;
-	      debug::printf(LOG_NOTICE,"XCLIENT: <%s>\n",$xclient);
-	      $this->ev_write($ctx, "220 OK xclient\r\n");
+              $xclient_attrsret=$this->xcmdheloargs_check($xclient,self::$xclient_name);
+	      if (is_array($xclient_attrsret))
+	      {
+		$ctx->enveloppe['xclient']=$xclient_attrsret;
+		debug::printf(LOG_NOTICE,"XCLIENT Attributs <%s> are valid!\n",$xclient);
+		$this->ev_write($ctx, "220 XCLIENT attribut are ok\r\n");
+	      }
+	      else
+	      {
+		debug::printf(LOG_NOTICE,"XCLIENT Error on <%s>, <%s> attribut not conform\n",$xclient,$xclient_attrsret);
+		$this->ev_write($ctx, "501 XCLIENT Error, <".$xclient_attrsret."> attribut not conform!\r\n");
+	      }
 	      break;
 	  case strncasecmp('STARTTLS', $line, 8):
 	      if (!$ctx->tls) 
@@ -614,12 +702,33 @@ class SMTPProtocol
 		break;
 	      }
 	      $this->ev_write($ctx, "220 Ready to start TLS\r\n");
-	      $ctx->cnx = EventBufferEvent::sslFilter($ctx->base,
+	      debug::printf(LOG_NOTICE,"Entering in TLS handchecking...\n");
+
+	      // upgrade the connexion to TLS
+	      $ctx->cnx->disable(Event::READ | Event::WRITE);
+	      $cnx = EventBufferEvent::sslFilter($ctx->base,
 		  $ctx->cnx, $ctx->sslctx,
-		  EventBufferEvent::SSL_ACCEPTING,
-		  EventBufferEvent::OPT_CLOSE_ON_FREE);
-	      $ctx->cnx->setCallbacks([$this, "ev_read"], NULL, [$this, 'ev_error'], $ctx);
-	      $ctx->cnx->enable(Event::READ | Event::WRITE);
+		  EventBufferEvent::SSL_ACCEPTING|EventBufferEvent::SSL_OPEN);
+	      if (!$cnx)
+	      {
+		  $ctx->cnx->free();
+		  $cnx->free();
+		  //$ctx->base->exit(NULL);
+		  $ctx->ev_close($ctx);
+		  debug::exit_with_error(63,"Couldn't create ssl bufferevent\n");
+		  break;
+	      }
+	      //$ctx->cnx->free();
+	      $ctx->cnx=$cnx;
+	      $ctx->tlsenabled=true;
+	      $ctx->cnx->setTimeouts($ctx->read_timeout,$ctx->write_timeout);
+	      $ctx->cnx->setCallbacks([$ctx, "ev_read"], NULL, [$ctx, 'ev_error'], $ctx);
+	      $ctx->cnx->enable(Event::READ);
+
+	      // reset of the connection
+	      // go to state HELO
+	      $ctx->state=self::STATE_HELO;
+	      unset($ctx->enveloppe);
 	      break;
 
 	  case strncasecmp('VRFY', $line, 4):
@@ -664,5 +773,23 @@ class SMTPProtocol
 	      break;
       }
   }
+
+  private function xcmdargs_check($xcmdargs,$autorized_attr)
+  {
+     if (preg_match_all("/(\w+)=(\w+)/",$xcmdargs,$arr)>=1)
+     {
+	$attrs=array();
+	foreach($arr[1] as $key => $args)
+	{
+	   $xattr=strtoupper($args);
+	   if (!in_array($xattr,$autorized_attr))
+	     return $xattr;
+	   $attrs[$xattr]=nettool::decode_xtext($arr[2][$key]);
+	}
+	return $attrs;
+     }
+     return $xcmdargs;
+  }
+
 }
 
