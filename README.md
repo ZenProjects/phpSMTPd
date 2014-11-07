@@ -132,9 +132,11 @@ PHP Extension:
      
        $ gnutls-cli --crlf --starttls -p 25 --debug 256 --insecure 127.0.0.1
        
-       send EHLO <hostname> and STARTTLS
+       - send EHLO <hostname> and STARTTLS
      
-       and after the response of STARTTLS send CTRL-D and gnutls-cli go in TLS handcheck
+       - and after the response of STARTTLS 
+       
+       - send CTRL-D and gnutls-cli go in TLS handcheck
 
 -----------------------------------
 
