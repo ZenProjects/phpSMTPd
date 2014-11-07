@@ -26,9 +26,11 @@ The STARTTLS server part are from this example also.
 The PHP daemon also inspired me.
 http://daemon.io/
 
+-----------------------------------
+
 ## SMTP Implementation Notes
 
-## for the SMTP client
+## SMTP client
 
   - Implement client part of SMTP, and implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL FROM, RCPT TO, QUIT
   - no need HELP, SEND, SAML, SOML, TURN, ETRN verbs in this client
@@ -36,7 +38,7 @@ http://daemon.io/
   - based largely on D.J. Berstein (author of QMAIL) implementation notes: http://cr.yp.to/smtp.html
   - Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
 
-### SMTP Client Implementation detail:
+### Implementation detail:
 
 #### HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
 
@@ -59,13 +61,14 @@ http://daemon.io/
   - send quit, wait response and close connection
   - NOTE: possible amelioration is to not wait response... like qmail client
 
-## for the SMTP Server
+
+## SMTP Server
 
   - Implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL, RCPT, RSET, VRFY, NOOP, QUIT
   - no HELP, SEND, SAML, SOML, TURN, ETRN verbs
   - conforming to ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
 
-### SMTP Client Implementation detail:
+### Implementation detail:
 
 #### HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
 
@@ -94,6 +97,8 @@ http://daemon.io/
 #### QUIT verb
   - QUIT close the connection after sending bye message
 
+-----------------------------------
+
 ### To use/test STARTLS:
 
   1. Prepare cert.pem certificate and privkey.pem private key files.
@@ -110,6 +115,8 @@ http://daemon.io/
        send EHLO <hostname> and STARTTLS
        and after the response of STARTTLS send CTRL-D and gnutls-cli go in TLS handcheck
 
+-----------------------------------
+
 ## The SMTP principal rfcs:
 
   http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
@@ -124,47 +131,49 @@ http://daemon.io/
 
   SMTP Extension | RFC | Description
   --- | --- | ---
-  SIZE 			| RFC 1870 | SMTP Service Extension for Message Size Declaration
-  8BITMIME 	| RFC 6152 | SMTP Service Extension for 8-bit MIME Transport
-  STARTTLS	| RFC 3207 | SMTP Service Extension for Secure SMTP over Transport Layer Security
-  AUTH	 		| RFC 4954 | SMTP Service Extension for Authentication
-  PIPLINING | RFC 2920 | SMTP Service Extension for Command Pipelining
-  CHUNKING 	| RFC 3030 | SMTP Service Extensions for Transmission of Large and Binary MIME Messages
-  DSN			  | RFC 3461 | Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
-  ENHANCEDSTATUSCODES	| RFC 3463 | Enhanced Mail System Status Codes
-  SMTPUTF8 		| RFC 6531 | SMTP Extension for Internationalized Email
+  SIZE 			| 1870 | SMTP Service Extension for Message Size Declaration
+  8BITMIME 	| 6152 | SMTP Service Extension for 8-bit MIME Transport
+  STARTTLS	| 3207 | SMTP Service Extension for Secure SMTP over Transport Layer Security
+  AUTH	 		| 4954 | SMTP Service Extension for Authentication
+  PIPLINING | 2920 | SMTP Service Extension for Command Pipelining
+  CHUNKING 	| 3030 | SMTP Service Extensions for Transmission of Large and Binary MIME Messages
+  DSN			  | 3461 | Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
+  ENHANCEDSTATUSCODES	| 3463 | Enhanced Mail System Status Codes
+  SMTPUTF8 		| 6531 | SMTP Extension for Internationalized Email
+
+-----------------------------------
 
 ## ESMTP Extension implementation status:
 
-- 8BITMIME, client/server done partial
+- 8BITMIME, **client/server done partial**
 
   http://cr.yp.to/smtp/8bitmime.html
   https://tools.ietf.org/html/rfc6152
 
-- STARTLS, client/server done
+- STARTLS, **client/server done**
 
   http://en.wikipedia.org/wiki/STARTTLS
   https://tools.ietf.org/html/rfc3207
 
-- SIZE, client/server done partial
+- SIZE, **client/server done partial**
 
   http://cr.yp.to/smtp/size.html
   http://tools.ietf.org/html/rfc1870
 
-- XCLIENT, client/server done
+- XCLIENT, **client/server done**
 
   http://www.postfix.org/XCLIENT_README.html
 
-- XFORWARD, client/server done
+- XFORWARD, **client/server done**
 
   http://www.postfix.org/XFORWARD_README.html
 
-- PIPELINING, not done but planned
+- PIPELINING, **not done but planned**
 
   http://tools.ietf.org/html/rfc2920
   http://cr.yp.to/smtp/pipelining.html
 
-- SMTP-AUTH, not done, planned CRAM-MD5, PLAIN only
+- SMTP-AUTH, **not done, planned CRAM-MD5, PLAIN only**
   
   http://tools.ietf.org/html/rfc4954 ==> SMTP AUTH are based on SASL
   http://www.fehcom.de/qmail/smtpauth.html ==> extension for qmail, good starting point
@@ -178,30 +187,30 @@ http://daemon.io/
   https://qmail.jms1.net/test-auth.shtml
   ==> for use with authenticated relay (not for public mx relay)
 
-- TLS DANE, not done, planned
+- TLS DANE, **not done, planned**
 
   https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13
   https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/
   http://www.postfix.org/TLS_README.html#client_tls_dane
 
-- ENHANCEDSTATUSCODES, not done posibly planned
+- ENHANCEDSTATUSCODES, **not done possibly planned**
 
   http://tools.ietf.org/html/rfc2034 ==> the extension
   http://tools.ietf.org/html/rfc3463 ==> List of Enhanced Mail System Status Codes
   http://tools.ietf.org/html/rfc1894 ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
 
-- SMTPUTF8, not done, not planned
+- SMTPUTF8, **not done, not planned**
 
   http://www.postfix.org/SMTPUTF8_README.html
   http://tools.ietf.org/html/rfc6531 ==> the SMTPUTF8 extension
   http://tools.ietf.org/html/rfc6532 ==> Internationalized Email Headers
   http://tools.ietf.org/html/rfc6533 ==> Internationalized Delivery Status and Disposition Notifications
 
-- DSN, not done, not planned
+- DSN, **not done, not planned**
 
   http://tools.ietf.org/html/rfc3461
 
-- CHUNKING, not done, not planned
+- CHUNKING, **not done, not planned**
 
   http://tools.ietf.org/html/rfc3030
 
