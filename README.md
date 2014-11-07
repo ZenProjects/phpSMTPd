@@ -1,6 +1,4 @@
-===============================
-        SuperListd
-===============================
+# SuperList Daemon
 
 SuperListd are Mailing List SMTP daemon coded 100% in php based on PECL-Event extension.
 Acting as SMTP Proxy to be used as proxy filter behind postfix to manage Mailing List.
@@ -25,13 +23,9 @@ The STARTTLS server part are from this example also.
 The PHP daemon also inspired me.
 http://daemon.io/
 
-////////////////////////////////////////////
-       SMTP Implementation Notes
-////////////////////////////////////////////
+## SMTP Implementation Notes
 
-//////////////////////////
-  for the SMTP client
-//////////////////////////
+## for the SMTP client
 
   - Implement client part of SMTP, and implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL FROM, RCPT TO, QUIT
   - no need HELP, SEND, SAML, SOML, TURN, ETRN verbs in this client
@@ -39,7 +33,7 @@ http://daemon.io/
   - based largely on D.J. Berstein (author of QMAIL) implementation notes: http://cr.yp.to/smtp.html
   - Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
 
-SMTP Client Implementation detail:
+### SMTP Client Implementation detail:
 
   //////////// HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
   = EHLO are sent systematicly (as say djb), and HELO only if $this->forceehlo is set to false and the SERVER not responded ESMTP in gretting
@@ -59,15 +53,13 @@ SMTP Client Implementation detail:
   = send quit, wait response and close connection
   = NOTE: possible amelioration is to not wait response... like qmail client
 
-//////////////////////////
-   for the SMTP Server
-//////////////////////////
+## for the SMTP Server
 
   - Implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL, RCPT, RSET, VRFY, NOOP, QUIT
   - no HELP, SEND, SAML, SOML, TURN, ETRN verbs
   - conforming to ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
 
-SMTP Client Implementation detail:
+### SMTP Client Implementation detail:
 
   //////////// HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
   = support EHLO and HELO
@@ -105,7 +97,7 @@ To use/test STARTLS:
        send EHLO <hostname> and STARTTLS
        and after the response of STARTTLS send CTRL-D and gnutls-cli go in TLS handcheck
 
-The SMTP principal rfcs:
+## The SMTP principal rfcs:
 
   http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
   http://en.wikipedia.org/wiki/Extended_SMTP
@@ -127,7 +119,7 @@ The SMTP principal rfcs:
   ENHANCEDSTATUSCODES	: RFC 3463 – Enhanced Mail System Status Codes
   SMTPUTF8 		: RFC 6531 - SMTP Extension for Internationalized Email
 
-ESMTP Extension implementation status:
+## ESMTP Extension implementation status:
 
 - 8BITMIME, client/server done partial
   http://cr.yp.to/smtp/8bitmime.html
