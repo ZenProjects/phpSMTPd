@@ -69,38 +69,41 @@ http://daemon.io/
 
 #### HELO/EHLO + XFORWARD/XCLIENT + STARTLS verbs
 
-  = support EHLO and HELO
-  = HELO not send extension like EHLO does
-  = send extension SIZE (send server configured maximum message size), 8BITMIME, VRFY as default
-  = send XCLIENT/XFORWARD extension if configuration enabeled
-  = send STARTTLS extension if configuration enabeled
-  = check resolvabilty of the hostname sended
+  - support EHLO and HELO
+  - HELO not send extension like EHLO does
+  - send extension SIZE (send server configured maximum message size), 8BITMIME, VRFY as default
+  - send XCLIENT/XFORWARD extension if configuration enabeled
+  - send STARTTLS extension if configuration enabeled
+  - check resolvabilty of the hostname sended
 
 #### MAIL, RCPT and DATA verbs
 
-  = all are implemented
-  = MAIL and RCPT controle the address format
-  = RCPT controle if the destination are configured Mailling List
-  = controle the sequancing the cmds
-  = SIZE option on MAIL cmd are supported, and abort if the size is larger the server configured maximum.
-  = no Q-P conversion, full 8BITMIME server. 
+  - all are implemented
+  - MAIL and RCPT controle the address format
+  - RCPT controle if the destination are configured Mailling List
+  - controle the sequancing the cmds
+  - SIZE option on MAIL cmd are supported, and abort if the size is larger the server configured maximum.
+  - no Q-P conversion, full 8BITMIME server. 
 
 #### VRFY, NOOP, RSET
 
-  = VRFY controle if the addresse are configured as mailing list
-  = NOOP do noop...
-  = RSET reset the enveloppe and restart sequencing to after EHLO/HELO
+  - VRFY controle if the addresse are configured as mailing list
+  - NOOP do noop...
+  - RSET reset the enveloppe and restart sequencing to after EHLO/HELO
 
 #### QUIT verb
-  = QUIT close the connection after sending bye message
+  - QUIT close the connection after sending bye message
 
 ### To use/test STARTLS:
 
-  1) Prepare cert.pem certificate and privkey.pem private key files.
+  1. Prepare cert.pem certificate and privkey.pem private key files.
+
      http://rene.bz/setting-smtp-authentication-over-tls-postfix/
      http://www.postfix.org/TLS_README.html
-  2) Launch the server script
-  3) to test TLS support:
+
+  2. Launch the server script
+  3. to test TLS support:
+
        $ openssl s_client  -connect localhost:25 -starttls smtp -crlf -quiet -state -msg
      or
        $ gnutls-cli --crlf --starttls -p 25 --debug 256 --insecure 127.0.0.1
@@ -119,15 +122,17 @@ http://daemon.io/
   Mail Message Format	: RFC 5322 - Internet Message Format
   http://tools.ietf.org/html/rfc5322
 
-  SIZE 			: RFC 1870 – SMTP Service Extension for Message Size Declaration
-  8BITMIME 		: RFC 6152 - SMTP Service Extension for 8-bit MIME Transport
-  STARTTLS		: RFC 3207 – SMTP Service Extension for Secure SMTP over Transport Layer Security
-  AUTH	 		: RFC 4954 – SMTP Service Extension for Authentication
-  PIPLINING 		: RFC 2920 – SMTP Service Extension for Command Pipelining
-  CHUNKING 		: RFC 3030 – SMTP Service Extensions for Transmission of Large and Binary MIME Messages
-  DSN			: RFC 3461 – Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
-  ENHANCEDSTATUSCODES	: RFC 3463 – Enhanced Mail System Status Codes
-  SMTPUTF8 		: RFC 6531 - SMTP Extension for Internationalized Email
+  SMTP Extension | RFC | Description
+  --- | --- | ---
+  SIZE 			| RFC 1870 | SMTP Service Extension for Message Size Declaration
+  8BITMIME 	| RFC 6152 | SMTP Service Extension for 8-bit MIME Transport
+  STARTTLS	| RFC 3207 | SMTP Service Extension for Secure SMTP over Transport Layer Security
+  AUTH	 		| RFC 4954 | SMTP Service Extension for Authentication
+  PIPLINING | RFC 2920 | SMTP Service Extension for Command Pipelining
+  CHUNKING 	| RFC 3030 | SMTP Service Extensions for Transmission of Large and Binary MIME Messages
+  DSN			  | RFC 3461 | Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
+  ENHANCEDSTATUSCODES	| RFC 3463 | Enhanced Mail System Status Codes
+  SMTPUTF8 		| RFC 6531 | SMTP Extension for Internationalized Email
 
 ## ESMTP Extension implementation status:
 
