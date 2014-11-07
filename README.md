@@ -163,23 +163,28 @@ http://daemon.io/
 
 - TLS DANE, not done, planned
 
-..(https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13)
-..(https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/)
-..(http://www.postfix.org/TLS_README.html#client_tls_dane)
+...https://tools.ietf.org/html/draft-ietf-dane-smtp-with-dane-13
+...https://datatracker.ietf.org/doc/draft-ietf-dane-smtp-with-dane/
+...http://www.postfix.org/TLS_README.html#client_tls_dane
 
 - ENHANCEDSTATUSCODES, not done posibly planned
 
-..(http://tools.ietf.org/html/rfc2034) ==> the extension
-..(http://tools.ietf.org/html/rfc3463) ==> List of Enhanced Mail System Status Codes
-..(http://tools.ietf.org/html/rfc1894) ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
+...http://tools.ietf.org/html/rfc2034 ==> the extension
+...http://tools.ietf.org/html/rfc3463 ==> List of Enhanced Mail System Status Codes
+...http://tools.ietf.org/html/rfc1894 ==> An Extensible Message Format for Delivery Status Notifications, defines a mechanism to send such coded material to users
 
 - SMTPUTF8, not done, not planned
-  (http://www.postfix.org/SMTPUTF8_README.html)
-  (http://tools.ietf.org/html/rfc6531) ==> the SMTPUTF8 extension
-  (http://tools.ietf.org/html/rfc6532) ==> Internationalized Email Headers
-  (http://tools.ietf.org/html/rfc6533) ==> Internationalized Delivery Status and Disposition Notifications
+
+...http://www.postfix.org/SMTPUTF8_README.html
+...http://tools.ietf.org/html/rfc6531 ==> the SMTPUTF8 extension
+...http://tools.ietf.org/html/rfc6532 ==> Internationalized Email Headers
+...http://tools.ietf.org/html/rfc6533 ==> Internationalized Delivery Status and Disposition Notifications
+
 - DSN, not done, not planned
-  (http://tools.ietf.org/html/rfc3461)
+
+...http://tools.ietf.org/html/rfc3461
+
 - CHUNKING, not done, not planned
-  (http://tools.ietf.org/html/rfc3030)
+
+...http://tools.ietf.org/html/rfc3030
 
