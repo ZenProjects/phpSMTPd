@@ -140,8 +140,9 @@ PHP Extension:
        
 you can test also with swaks: http://www.jetmore.org/john/code/swaks/
        
-       $ ./swaks --to mylist@listes.mydomain.tld --from myaddresse@mydomain.tld --server 127.0.0.1:25 -tls
-       
+ $ ./swaks --to mylist@listes.mydomain.tld --from myaddresse@mydomain.tld --server 127.0.0.1:25 -tls
+
+
 -----------------------------------
 
 ## The SMTP principal rfcs:
