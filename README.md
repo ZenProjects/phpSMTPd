@@ -49,7 +49,7 @@ PHP Extension:
   - Implement client part of SMTP, and implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL FROM, RCPT TO, QUIT
   - no need HELP, SEND, SAML, SOML, TURN, ETRN verbs in this client
   - for the moment no support for VRFY/EXPN, but possible addition to VRFY/EXPN support in future to check address
-  - based largely on D.J. Berstein (author of QMAIL) implementation notes: http://cr.yp.to/smtp.html
+  - based largely on D.J. Berstein (author of QMAIL) implementation notes: http://cr.yp.to/smtp/client.html
   - Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
 
 ### Implementation detail:
@@ -81,6 +81,7 @@ PHP Extension:
   - Implement this SMTP verbs: EHLO/HELO, STARTTLS, XFORWARD, XCLIENT, MAIL, RCPT, RSET, VRFY, NOOP, QUIT
   - no HELP, SEND, SAML, SOML, TURN, ETRN verbs
   - conforming to ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
+  - based largely on D.J. Berstein (author of QMAIL) implementation notes: http://cr.yp.to/smtp.html
 
 ### Implementation detail:
 
