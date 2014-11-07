@@ -119,15 +119,21 @@ PHP Extension:
   1. Prepare cert.pem certificate and privkey.pem private key files.
 
      http://rene.bz/setting-smtp-authentication-over-tls-postfix/
+
      http://www.postfix.org/TLS_README.html
 
   2. Launch the server script
+
   3. to test TLS support:
 
        $ openssl s_client  -connect localhost:25 -starttls smtp -crlf -quiet -state -msg
+     
      or
+     
        $ gnutls-cli --crlf --starttls -p 25 --debug 256 --insecure 127.0.0.1
+       
        send EHLO <hostname> and STARTTLS
+     
        and after the response of STARTTLS send CTRL-D and gnutls-cli go in TLS handcheck
 
 -----------------------------------
