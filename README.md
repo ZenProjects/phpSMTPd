@@ -137,7 +137,7 @@ PHP Extension:
        - and after the response of STARTTLS 
        
        - send CTRL-D and gnutls-cli go in TLS handcheck
-
+       
       you can test also with swaks: http://www.jetmore.org/john/code/swaks/
       ./swaks --to mylist@listes.mydomain.tld --from myaddresse@mydomain.tld --server 127.0.0.1:25 -tls
 -----------------------------------
