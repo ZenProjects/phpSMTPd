@@ -302,7 +302,7 @@ Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at 
   8BITMIME 	| 6152 | SMTP Service Extension for 8-bit MIME Transport
   STARTTLS	| 3207 | SMTP Service Extension for Secure SMTP over Transport Layer Security
   AUTH	 		| 4954 | SMTP Service Extension for Authentication
-  PIPLINING | 2920 | SMTP Service Extension for Command Pipelining
+  PIPELINING | 2920 | SMTP Service Extension for Command Pipelining
   CHUNKING 	| 3030 | SMTP Service Extensions for Transmission of Large and Binary MIME Messages
   DSN			  | 3461 | Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
   ENHANCEDSTATUSCODES	| 3463 | Enhanced Mail System Status Codes
