@@ -6,7 +6,7 @@ Acting as SMTP Proxy to be used as proxy filter behind postfix to manage Mailing
 
 In this project they have implemented in 100% PHP a complete [PECL-Event](http://php.net/manual/fr/book.event.php) ([libevent](http://libevent.org/)) based SMTP Client and Server stack.
 
-Server part are Multiprocess pre-forked daemon.
+Server part are Multiprocess pre-forked daemon with watchdog.
 
 They can start as root listen on port <1025 and impersonate to other user.
 
