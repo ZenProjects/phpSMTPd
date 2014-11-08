@@ -113,6 +113,64 @@ ssl_server_crt          = /path/to/hostname.certificat.chained.crt
 ssl_server_key          = /path/to/hostname.privatekey.key
 ```
 
+start the server:
+```
+$ sbin/smtpd --listen --daemon
+```
+
+to see if has started:
+```
+$ ps -ef | grep Super
+root      70045  23858  0 02:01 pts/1    00:00:00 SuperListdaemon
+root      70051  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #0
+root      70052  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #1
+root      70053  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #2
+root      70054  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #3
+root      70064  32148  0 02:01 pts/3    00:00:00 grep Super
+
+```
+
+read in your syslog config file where "mail" facilty go.
+
+example in /etc/rsyslog.conf:
+```
+# Log all the mail messages in one place.
+mail.*                                                  -/path/to/maillog
+```
+
+and you can see debug information on this maillog:
+
+```
+$ tail -f /path/to/maillog 
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Starting SuperListdaemon Serveur pid:70045 listen:127.0.0.1:2025 at <Sat, 08 Nov 2014 01:01:36 +0000>
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Using PHP v5.5.10
+Nov  8 02:01:36 hotpoint SuperListd[70045]: With PECL-Event v1.11.0
+Nov  8 02:01:36 hotpoint SuperListd[70045]: With OpenSSL 1.0.1e-fips 11 Feb 2013
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Loaded extensions Core,date,ereg,libxml,pcre,sqlite3,ctype,dba,dom,fileinfo,filter,hash,iconv,json,SPL,PDO,pdo_sqlite,openssl,posix,Reflection,session,SimpleXML,standard,tokenizer,xml,xmlreader,xmlwriter,apcu,curl,sockets,ftp,gd,mailparse,mbstring,mysql,mysqli,zlib,pcntl,pdo_mysql,pdo_pgsql,pgsql,pthreads,shmop,event,sysvmsg,sysvsem,sysvshm,tokyo_tyrant,zip,Phar,zmq,mhash,apc
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Try to run the daemon
+Nov  8 02:01:36 hotpoint SuperListd[70045]: CreateQueue... at /opt/superlist/includes/SMTPDaemon.php:53
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Run the daemon in listen mode
+Nov  8 02:01:36 hotpoint SuperListd[70045]: This machine has 4 processing unit
+Nov  8 02:01:36 hotpoint SuperListd[70045]: This EventProcessPool with 4 workers was created...
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Init shm /opt/superlist/ipc/scoreboard at 0xf521ba1f
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Init sem /opt/superlist/ipc/scoreboard_sem at 0x4eefbb99
+Nov  8 02:01:36 hotpoint SuperListd[70045]: QueueCount queue inbound = 178
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Starting Listening SMTP on 127.0.0.1:2025 at hotpoint.ch2o.info
+Nov  8 02:01:36 hotpoint SuperListd[70045]: hook <HeartBeat> set to <SuperListd\SMTPDaemon::SuperviseQueue>
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Go in dispatch
+Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager start at Sat, 08 Nov 2014 01:01:36 +0000
+Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager Worker #0 forked with pid:70051 at Sat, 08 Nov 2014 01:01:36 +0000
+Nov  8 02:01:36 hotpoint SuperListd[70051]: Worker #0 with pid:70051 started at <Sat, 08 Nov 2014 01:01:36 +0000>
+Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager Worker #1 forked with pid:70052 at Sat, 08 Nov 2014 01:01:36 +0000
+Nov  8 02:01:36 hotpoint SuperListd[70052]: Worker #1 with pid:70052 started at <Sat, 08 Nov 2014 01:01:36 +0000>
+Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager Worker #2 forked with pid:70053 at Sat, 08 Nov 2014 01:01:36 +0000
+Nov  8 02:01:36 hotpoint SuperListd[70053]: Worker #2 with pid:70053 started at <Sat, 08 Nov 2014 01:01:36 +0000>
+Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager Worker #3 forked with pid:70054 at Sat, 08 Nov 2014 01:01:36 +0000
+Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at <Sat, 08 Nov 2014 01:01:36 +0000>
+```
+
+
+
 -----------------------------------
 
 ## SMTP Implementation Notes
