@@ -4,18 +4,18 @@ SuperListd are Mailing List SMTP daemon coded 100% in PHP with the PECL-Event ex
 
 The idea is to acting as SMTP Proxy to be used as proxy filter behind postfix ([Postfix Before-Queue Content Filter](http://www.postfix.org/SMTPD_PROXY_README.html)) to manage Mailing List.
 
-Can be launched in [spawn](http://www.postfix.org/spawn.8.html) mode (that are equivalent of inetd) of the postfix [master](http://www.postfix.org/master.5.html) process daemon.
+Within this project they have implemented complete SMTP Client and Server stack 100% in PHP completely based on   [PECL-Event](http://php.net/manual/fr/book.event.php) ([libevent](http://libevent.org/)).
 
-In this project they have implemented in 100% PHP a complete [PECL-Event](http://php.net/manual/fr/book.event.php) ([libevent](http://libevent.org/)) based SMTP Client and Server stack.
+Can be launched in [spawn](http://www.postfix.org/spawn.8.html) mode (that are equivalent of inetd) of the postfix [master](http://www.postfix.org/master.5.html) process daemon. 
 
-Server part are Multiprocess pre-forked daemon with watchdog (they use pcntl_fork and pecl-event to manage signal event).
+Or launched as standalone Multiprocess pre-forked server daemon, with a watchdog (using pcntl_fork and pecl-event to manage signal event of the worker).
 
-They can start as root listen ([EventListener](http://php.net/manual/fr/class.eventlistener.php)) on socket port <1025 and impersonate to other user (they use posix setuid/gid).
+In this mode they start as root (or not) and listen ([EventListener](http://php.net/manual/fr/class.eventlistener.php)) on socket port (can be <1025 if started as root) and impersonate to other user (if started as with use of posix setuid/gid).
 
 The skelete of the server part are based on SMTP event based example on php site by Andrew Rose :
 http://php.net/manual/fr/event.examples.php
 
-The STARTTLS server part are from this example also.
+The STARTTLS server part are from this example also, the client part has been developped from scratch.
 
 The PHP daemon also inspired me.
 http://daemon.io/
