@@ -30,6 +30,8 @@ The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementati
 | http://cr.yp.to/smtp/8bitmime.html | 8BITMIME extension          |
 | http://cr.yp.to/smtp/size.html     | SIZE extension              |
 
+# _**For the moment store only message on inbound queue.**_
+
 ## Prerequisit
 
 PHP V5.5 minimum
