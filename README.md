@@ -19,17 +19,17 @@ The PHP daemon also inspired me.
 http://daemon.io/
 
 --------
-
 --------
+
 # WARNING
+
+## _the project are in pre alpha phase_
+
+## For the moment at this stage of the project they only receive SMTP message and store message it on inbound queue...
+
+## _they are not operational for the moment_
+
 --------
-
-_the project are in pre alpha phase_
-
-For the moment at this stage of the project they only receive SMTP message and store message it on inbound queue...
-
-_they are not operational for the moment_
-
 --------
 
 The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
