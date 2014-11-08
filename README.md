@@ -18,11 +18,12 @@ The STARTTLS server part are from this example also.
 The PHP daemon also inspired me.
 http://daemon.io/
 
-=========
+--------
 # WARNING
-# For the moment at this stage the project receive message and store message on inbound queue, __the are in pre alpha phase__ ...
-# they are not operational for the moment...
-=========
+__the project are in pre alpha phase__ 
+For the moment at this stage of the project they only receive SMTP message and store message it on inbound queue...
+__they are not operational for the moment___
+--------
 
 The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
 
