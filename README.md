@@ -86,12 +86,12 @@ queue_dir = /path/to/queue/basedir
 
 activate/desactivate smtp extension:
 
-- tls=true for use SMTP STARTTLS
-- xclient=true for use XCLIENT extension (to use behind postfix or an smtp proxy)
+- set *tls=true* for use SMTP STARTTLS
+- set *xclient=true* for use XCLIENT extension (to use behind postfix or an smtp proxy)
   - http://nginx.org/en/docs/mail/ngx_mail_proxy_module.html
   - http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt
   - http://www.postfix.org/XCLIENT_README.html
-- xforward=true for use XFORWARD extension (to use behind postfix)
+- set *xforward=true* for use XFORWARD extension (to use behind postfix)
 
 ```
 xclient = false
