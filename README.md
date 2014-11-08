@@ -25,7 +25,7 @@ http://daemon.io/
 
 # WARNING
 
-## _The project are in pre alpha phase_
+## _The project are completely experimental_
 
 ## At this stage of the project they only receive SMTP message and store message it on inbound queue...
 
@@ -44,8 +44,6 @@ The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementati
 | http://cr.yp.to/smtp/8bitmime.html | 8BITMIME extension          |
 | http://cr.yp.to/smtp/size.html     | SIZE extension              |
 
-
-
 ## Prerequisit
 
 PHP V5.5 minimum
@@ -58,6 +56,62 @@ PHP Extension:
 - sysvshm
 - PCRE
 - POSIX
+
+## starting the daemon
+
+Clone the git to repertoire to install:
+```
+$ git clone https://github.com/mcarbonneaux/SuperListd.git
+```
+
+```
+$ cd SuperListd
+$ cp config/php-smtpd.ini.sample to config/php-smtpd.ini
+```
+
+edit config/php-smtpd.ini and change the different parametter needed.
+
+create user for the daemon and change user parametter acordingly.
+
+```
+user = superlistd
+```
+
+create /path/to/queue/basedir
+change the owner of this directory to "user" parameter.
+
+```
+queue_dir = /path/to/queue/basedir
+```
+
+activate/desactivate smtp extension:
+
+- tls=true for use SMTP STARTTLS
+- xclient=true for use XCLIENT extension (to use behind postfix or an smtp proxy)
+  - http://nginx.org/en/docs/mail/ngx_mail_proxy_module.html
+  - http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt
+  - http://www.postfix.org/XCLIENT_README.html
+- xforward=true for use XFORWARD extension (to use behind postfix)
+
+```
+xclient = false
+xforward = false
+tls = false
+```
+
+
+Prepare hostname.certificat.chained.crt certificate and hostname.privatekey.key private key files.
+
+like in this links:
+
+http://rene.bz/setting-smtp-authentication-over-tls-postfix/
+
+http://www.postfix.org/TLS_README.html
+
+```
+ssl_server_crt          = /path/to/hostname.certificat.chained.crt
+ssl_server_key          = /path/to/hostname.privatekey.key
+```
 
 -----------------------------------
 
