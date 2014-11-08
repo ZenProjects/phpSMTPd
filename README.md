@@ -155,7 +155,7 @@ Nov  8 02:01:36 hotpoint SuperListd[70045]: This EventProcessPool with 4 workers
 Nov  8 02:01:36 hotpoint SuperListd[70045]: Init shm /opt/superlist/ipc/scoreboard at 0xf521ba1f
 Nov  8 02:01:36 hotpoint SuperListd[70045]: Init sem /opt/superlist/ipc/scoreboard_sem at 0x4eefbb99
 Nov  8 02:01:36 hotpoint SuperListd[70045]: QueueCount queue inbound = 178
-Nov  8 02:01:36 hotpoint SuperListd[70045]: Starting Listening SMTP on 127.0.0.1:2025 at hotpoint.ch2o.info
+Nov  8 02:01:36 hotpoint SuperListd[70045]: Starting Listening SMTP on 127.0.0.1:2025 at myhost.tld
 Nov  8 02:01:36 hotpoint SuperListd[70045]: hook <HeartBeat> set to <SuperListd\SMTPDaemon::SuperviseQueue>
 Nov  8 02:01:36 hotpoint SuperListd[70045]: Go in dispatch
 Nov  8 02:01:36 hotpoint SuperListd[70045]: EventProcessPoolManager start at Sat, 08 Nov 2014 01:01:36 +0000
