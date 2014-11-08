@@ -10,7 +10,15 @@ Server part are Multiprocess pre-forked daemon.
 
 They can start as root listen on port <1025 and impersonate to other user.
 
-Largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
+The skelete of the server part are based on SMTP event based example on php site by Andrew Rose :
+http://php.net/manual/fr/event.examples.php
+
+The STARTTLS server part are from this example also.
+
+The PHP daemon also inspired me.
+http://daemon.io/
+
+The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
 
 | Links                              | SMTP verbs                  |
 | ---------------------------------- | --------------------------- |
@@ -21,15 +29,6 @@ Largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/sm
 | http://cr.yp.to/smtp/vrfy.html     | VRFY/EXPN verbs             |
 | http://cr.yp.to/smtp/8bitmime.html | 8BITMIME extension          |
 | http://cr.yp.to/smtp/size.html     | SIZE extension              |
-
-The skelete of the server part are based on SMTP event based example on php site by Andrew Rose :
-http://php.net/manual/fr/event.examples.php
-
-The STARTTLS server part are from this example also.
-
-The PHP daemon also inspired me.
-http://daemon.io/
-
 
 ## Prerequisit
 
