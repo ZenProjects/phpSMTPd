@@ -357,6 +357,8 @@ Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at 
   http://tools.ietf.org/html/rfc2195 ==> SASL CRAM-MD5
 
   http://tools.ietf.org/html/rfc4616 ==> SASL PLAIN
+  
+  http://tools.ietf.org/id/draft-murchison-sasl-login-00.txt ==> SASL LOGIN
 
   http://tools.ietf.org/html/rfc6331 ==> SASL DIGEST-MD5 (obsoleted)
 
