@@ -1,8 +1,8 @@
 # SuperList Daemon
 
-SuperListd are Mailing List SMTP daemon coded 100% in php based on PECL-Event extension.
+SuperListd are Mailing List SMTP daemon coded 100% in PHP with the PECL-Event extension.
 
-Acting as SMTP Proxy to be used as proxy filter behind postfix to manage Mailing List.
+The idea is to acting as SMTP Proxy to be used as proxy filter behind postfix ([Postfix Before-Queue Content Filter](http://www.postfix.org/SMTPD_PROXY_README.html)) to manage Mailing List.
 
 In this project they have implemented in 100% PHP a complete [PECL-Event](http://php.net/manual/fr/book.event.php) ([libevent](http://libevent.org/)) based SMTP Client and Server stack.
 
