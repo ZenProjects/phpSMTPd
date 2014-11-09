@@ -1,6 +1,6 @@
 # SuperList Daemon
 
-SuperListd are Mailing List SMTP daemon coded 100% in PHP with the PECL-Event extension.
+SuperListd are Experimental Project of Mailing List daemon coded 100% in PHP with the PECL-Event extension.
 
 The idea is to acting as SMTP Proxy to be used as proxy filter behind postfix ([Postfix Before-Queue Content Filter](http://www.postfix.org/SMTPD_PROXY_README.html)) to manage Mailing List.
 
@@ -295,6 +295,10 @@ Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at 
   Mail Message Format	: RFC 5322 - Internet Message Format
 
   http://tools.ietf.org/html/rfc5322
+  
+  Requirements for Internet Hosts -- Application and Support
+  
+  https://tools.ietf.org/html/rfc1123
 
   SMTP Extension | RFC | Description
   --- | --- | ---
