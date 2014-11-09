@@ -298,7 +298,7 @@ Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at 
   
   Requirements for Internet Hosts -- Application and Support
   
-  https://tools.ietf.org/html/rfc1123
+  https://tools.ietf.org/html/rfc1123#page-48
 
   SMTP Extension | RFC | Description
   --- | --- | ---
