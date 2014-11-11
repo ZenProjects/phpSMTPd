@@ -125,8 +125,9 @@ class SMTPProtocol
 	  debug::exit_with_error(62,"no ssl context with tls option activated\n");
       }
 
-      //if (!$this->cnx = new EventBufferEvent($this->base, $fd, EventBufferEvent::OPT_CLOSE_ON_FREE))
-      if (!$this->cnx = new EventBufferEvent($this->base, $fd))
+      $ev_options=0;
+      // $ev_options |= EventBufferEvent::OPT_CLOSE_ON_FREE;
+      if (!$this->cnx = new EventBufferEvent($this->base, $fd,$ev_options))
       {
 	  $this->base->exit(NULL);
 	  debug::exit_with_error(63,"Couldn't create bufferevent\n");
@@ -165,10 +166,10 @@ class SMTPProtocol
 
 	if ($ctx->tlsenabled===true)
 	{
-	   debug::printf(LOG_NOTICE, "Cipher:%s\n",trim($buffer->sslGetCurrentCipher()));
-	   debug::printf(LOG_NOTICE, "CipherVersion:%s\n",$buffer->sslGetCurrentVersion());
-	   debug::printf(LOG_NOTICE, "CipherName:%s\n",$buffer->sslGetCurrentCipherName());
-	   debug::printf(LOG_NOTICE, "CipherProtocol:%s\n",$buffer->sslGetCurrentProtocol());
+	    debug::printf(LOG_NOTICE, "Cipher           : %s\n",implode("/",preg_split("/\s+/",trim($buffer->sslGetCipherInfo()))));
+	    debug::printf(LOG_NOTICE, "CipherVersion    : %s\n",$buffer->sslGetCipherVersion());
+	    debug::printf(LOG_NOTICE, "CipherName       : %s\n",$buffer->sslGetCipherName());
+	    debug::printf(LOG_NOTICE, "CipherProtocol   : %s\n",$buffer->sslGetProtocol());
 	}
 
 	debug::printf(LOG_NOTICE, "Connected.\n");
@@ -348,6 +349,8 @@ class SMTPProtocol
 	      $ctx->state=self::STATE_HELO;
 	      $ctx->clientData="";
 	      $ctx->clientDataLen=0;
+	      unset($ctx->enveloppe['rcpt']);
+	      unset($ctx->enveloppe['mailfrom']);
 	    }
 	  }
       }
@@ -361,7 +364,7 @@ class SMTPProtocol
       $connexion_data=$ctx->listener->connections[$ctx->id];
      else 
       $connexion_data=$ctx;
-     //debug::print_r(LOG_DEBUG,$this->mimeDecode($connexion_data->clientData));
+     debug::print_r(LOG_DEBUG,$this->mimeDecode($connexion_data->clientData));
 
      $enveloppe=array("helo_host" => $connexion_data->enveloppe['helo_host'],
 		      "client_ip" => $connexion_data->address[0],
@@ -369,9 +372,9 @@ class SMTPProtocol
 		      "connect_time" => $connexion_data->connect_time,
 		      "helo_time" => $connexion_data->enveloppe['helo_time'],
 		      "data_time" => microtime(true),
-		      "sender" => $connexion_data->enveloppe['reverse_path'],
-		      "sender_parsed" => $connexion_data->enveloppe['reverse_path_address'],
-		      "sender_options" => $connexion_data->enveloppe['mail_options'],
+		      "sender" => $connexion_data->enveloppe['mailfrom']['reverse_path'],
+		      "sender_parsed" => $connexion_data->enveloppe['mailfrom']['reverse_path_address'],
+		      "sender_options" => $connexion_data->enveloppe['mailfrom']['mail_options'],
 		      "recipients" => $connexion_data->enveloppe['rcpt'],
 		      "xforward" => @$connexion_data->enveloppe['xforward'],
 		      "xclient" => @$connexion_data->enveloppe['xclient'],
@@ -387,8 +390,16 @@ class SMTPProtocol
             if (!is_array($value2))
 	      debug::printf(LOG_INFO,"Enveloppe In: %s[%s]=%s\n",$key,$key2,$value2);
 	    else
+	    {
 	      foreach($value2 as $key3 => $value3)
-	      debug::printf(LOG_INFO,"Enveloppe In: %s[%s][%s]=%s\n",$key,$key2,$key3,$value3);
+	      {
+                if (!is_array($value2))
+	          debug::printf(LOG_INFO,"Enveloppe In: %s[%s][%s]=%s\n",$key,$key2,$key3,$value3);
+		else
+	          foreach($value3 as $key4 => $value4)
+	          debug::printf(LOG_INFO,"Enveloppe In: %s[%s][%s][%s]=%s\n",$key,$key2,$key3,$key4,$value4);
+	      }
+	    }
 	  }
 	}
 	else
@@ -476,6 +487,7 @@ class SMTPProtocol
 	      $ctx->enveloppe['helo_host']=$helo_host;
 	      $ctx->enveloppe['helo_time']=microtime(true);
 
+	      debug::printf(LOG_NOTICE,"HELO Host <%s>\n",$helo_host);
 	      $this->ev_write($ctx, "250 ".$ctx->hostname." is at your service\r\n");
 	      $ctx->state=self::STATE_HELO;
 	      break;
@@ -491,10 +503,12 @@ class SMTPProtocol
 	      unset($ctx->enveloppe);
 	      $ctx->enveloppe['helo_host']=$helo_host;
 	      $ctx->enveloppe['helo_time']=microtime(true);
+	      debug::printf(LOG_NOTICE,"EHLO Host <%s>\n",$helo_host);
 
 	      $this->ev_write($ctx, "250-".$ctx->hostname." is at your service, [".$connexion_data->address[0]."]\r\n");
 	      $this->ev_write($ctx, "250-8BITMIME\r\n");
-	      $this->ev_write($ctx, "250-VRFY\r\n");
+	      // not obliged to annonce the VRFY support according to RFC 821 §4.5.1 as is an required in SMTP minimum implementation
+	      //$this->ev_write($ctx, "250-VRFY\r\n");
 	      if ($ctx->tls&&$ctx->tlsenabled!==true) $this->ev_write($ctx, "250-STARTTLS\r\n");
 	      if ($ctx->xclient) $this->ev_write($ctx, "250-XCLIENT ".implode(" ",self::$xclient_name)."\r\n");
 	      if ($ctx->xforward) $this->ev_write($ctx, "250-XFORWARD ".implode(" ",self::$xforward_name)."\r\n");
@@ -534,17 +548,18 @@ class SMTPProtocol
 		     $this->ev_write($ctx, "552 message size exceeds fixed maximium message size\r\n");
 		     break;
 		   }
+		   $ctx->enveloppe['mailfrom']['max_size']=$sizes[1];
 		 }
 		 if (RFC822::is_valid_email_address($arr[1]))
 		 {
 		   $mail_address=$arr[1];
 		   $mail_options=$arr[2];
-		   $ctx->enveloppe['reverse_path']=$mail_address;
-		   $ctx->enveloppe['mail_options']=$mail_options;
+		   $ctx->enveloppe['mailfrom']['reverse_path']=$mail_address;
+		   $ctx->enveloppe['mailfrom']['mail_options']=$mail_options;
 
 		   debug::printf(LOG_NOTICE,"MAIL <%s> address valid\n",$mail_address);
-		   $ctx->enveloppe['reverse_pathdecoded']=mailparse_rfc822_parse_addresses($mail_address);
-		   $ctx->enveloppe['reverse_path_address']=$this->getrfc822Address($mail_address);
+		   $ctx->enveloppe['mailfrom']['reverse_pathdecoded']=mailparse_rfc822_parse_addresses($mail_address);
+		   $ctx->enveloppe['mailfrom']['reverse_path_address']=$this->getrfc822Address($mail_address);
 		   $this->ev_write($ctx, "250 OK mail\r\n");
 		   $ctx->state=self::STATE_HEADER;
 		   break;
@@ -590,7 +605,7 @@ class SMTPProtocol
 	  case strncasecmp('DATA', $line, 4):
 	      if ($ctx->state!=self::STATE_HEADER||
 		  count($ctx->enveloppe['rcpt'])==0||
-		  !isset($ctx->enveloppe['reverse_path']))
+		  !isset($ctx->enveloppe['mailfrom']))
 	      {
 		$this->ev_write($ctx, "503 DATA Bad sequence of commands\r\n");
 		$this->ev_close($ctx);
@@ -612,7 +627,8 @@ class SMTPProtocol
 		break;
 	      }
 	      $ctx->state=self::STATE_HELO;
-	      unset($ctx->enveloppe);
+	      unset($ctx->enveloppe['rcpt']);
+	      unset($ctx->enveloppe['mailfrom']);
 	      $this->ev_write($ctx, "250 OK rset\r\n");
 	      break;
 	  case strncasecmp('NOOP', $line, 4):

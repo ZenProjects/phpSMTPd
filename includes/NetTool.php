@@ -9,6 +9,13 @@ require_once("Debug.php");
 
 class NetTool 
 {
+   // const not implemented in the socket extension for the moment
+   const IPPROTO_TCP 	= 6;	/* Transmission Control Protocol        */
+   // http://www.tldp.org/HOWTO/html_single/TCP-Keepalive-HOWTO/
+   const TCP_KEEPIDLE  	= 4;	/* Start keeplives after this period */
+   const TCP_KEEPINTVL  = 5;	/* Interval between keepalives */
+   const TCP_KEEPCNT  	= 6;	/* Number of keepalives before death */
+
    // RFC 1891 xtext encoding
    // http://tools.ietf.org/html/rfc1891
    // based on perl cpan module Convert-XText

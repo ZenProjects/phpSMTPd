@@ -40,6 +40,8 @@ user = superlistd
 xclient = false
 xforward = false
 tls = false
+
+; crlf mode on or off (used in stdin mode on unixi for debuging only)
 crlf = false
 
 ; read/write timout in secondes

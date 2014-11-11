@@ -29,6 +29,7 @@ abstract class ProcessDaemon
   public $argv = array();
   public $args = array();
   public $maxworker = null;
+  public $heartbeat = 1;
   protected $listener = null;
   protected $smtp = null;
   protected $ppm = null;
@@ -38,10 +39,10 @@ abstract class ProcessDaemon
 
   public function __construct($basedir,$defaultconfig,$defaultdaemonname) 
   {
+     Debug::$loglevel=LOG_WARNING;
      $this->basedir=$basedir;
      $this->config_file=$this->basedir . "/config/".$defaultconfig;
      debug::open($defaultdaemonname,LOG_PID|LOG_PERROR);
-     Debug::$loglevel=LOG_WARNING;
   }
 
   public function main($argc,$argv)
@@ -93,9 +94,23 @@ abstract class ProcessDaemon
     gc_enable();
 
     //////////////////////////
-    // reopen syslog with perror if args stderr is set
+    // set the loglevel accordingly to configuration file
+    // and reopen syslog with perror if args stderr is set
     //////////////////////////
-    if (isset($options["stderr"]))
+    if (isset($this->options["log_level"]))
+    {
+       ob_start();
+       $loglevel=@eval("return ".$this->options["log_level"].";");
+       $output = ob_get_contents();
+       ob_end_clean();
+       if ($loglevel<0||$loglevel>LOG_DEBUG||!is_int($loglevel))
+       {
+	 debug::printf(LOG_ERR, "Loglevel <%s> not known!",$this->options["log_level"]);
+	 $this->syntax($args);
+       }
+       Debug::$loglevel=$loglevel;
+    }
+    if (isset($this->options["stderr"]))
        debug::open($this->options['daemon_syslogname'],LOG_PID|LOG_PERROR);
     else
        debug::open($this->options['daemon_syslogname'],LOG_PID);
@@ -104,6 +119,11 @@ abstract class ProcessDaemon
     // start banner
     //////////////////////////
     debug::printf(LOG_NOTICE, "Starting %s Serveur pid:%s listen:%s at <%s>\n",$this->options['daemon_processname'],posix_getpid(),$this->options['listen'],gmdate('r'));
+    debug::printf(LOG_INFO, "Using PHP v%s\n",PHP_VERSION);
+    debug::printf(LOG_INFO, " With PECL-Event v%s\n",phpversion('event'));
+    debug::printf(LOG_INFO, " With %s\n",OPENSSL_VERSION_TEXT);
+    debug::printf(LOG_INFO, " With extensions : %s\n",implode(',',get_loaded_extensions()));
+    $this->callHook("StartMsg",array($this));
 
     //////////////////////////
     // fork and daemonize
@@ -159,6 +179,7 @@ abstract class ProcessDaemon
 
       $worker=new EventProcessWorker($this->options['daemon_processname']."-Worker",-1,$this->listenbase);
       $this->ppm = new EventProcessPoolManager($worker,$this->options['daemon_processname'],$this->maxworker,$this->options['user']);
+      $this->ppm->heartbeat=$this->heartbeat;
       $this->initipc();
       $this->callHook("RunListen",array($this));
       debug::printf(LOG_NOTICE,"Go in dispatch\n");
@@ -285,7 +306,7 @@ abstract class ProcessDaemon
       }
       if (isset($args["stderr"])&&!isset($args["daemon"]))
       {
-         $this->options['stderr']=true;
+         $this->options["stderr"]=true;
       }
 
       if (isset($args["pidfile"]))
@@ -293,18 +314,9 @@ abstract class ProcessDaemon
         $this->options['pidfile']=$args["pidfile"]; 
       }
 
-      if (isset($this->options["log_level"]))
+      if (isset($this->options["heartbeat"]))
       {
-	 ob_start();
-         $loglevel=@eval("return ".$this->options["log_level"].";");
-	 $output = ob_get_contents();
-	 ob_end_clean();
-	 if ($loglevel<0||$loglevel>LOG_DEBUG||!is_int($loglevel))
-	 {
-	   debug::printf(LOG_ERR, "Loglevel <%s> not known!",$this->options["log_level"]);
-	   $this->syntax($args);
-	 }
-	 Debug::$loglevel=$loglevel;
+         $this->heartbeat=$this->options["heartbeat"];
       }
       if (isset($this->options["maxworker"]))
       {
@@ -333,12 +345,24 @@ abstract class ProcessDaemon
   {
       if ( version_compare( PHP_VERSION, '5.4', '<' ) ) 
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." requires PHP 5.4\n");
+	  debug::exit_with_error(6,$this->options['daemon_processname']." requires PHP 5.5\n");
       }
 
+      /*
       if (!extension_loaded("apcu")&&ini_get("apc.enable_cli")==1)
       {
 	  debug::exit_with_error(6,$this->options['daemon_processname']." need apcu and apc.enable_cli=1 in php.ini extension http://pecl.php.net/package/APCu\n");
+      }
+      */
+
+      if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'||strtoupper(substr(PHP_OS, 0, 6))==='CYGWIN') 
+      {
+	  debug::exit_with_error(6,$this->options['daemon_processname']." don't work on windows or in CYGWIN!\n");
+      }
+
+      if (!function_exists('cli_set_process_title'))
+      {
+	  debug::exit_with_error(6,$this->options['daemon_processname']." need cli_set_process_title function, http://php.net/manual/en/function.cli-set-process-title.php\n");
       }
 
       if (!extension_loaded("pcre"))
@@ -356,9 +380,19 @@ abstract class ProcessDaemon
 	  debug::exit_with_error(6,$this->options['daemon_processname']." need PCNTL extension, http://php.net/manual/en/book.pcntl.php\n");
       }
 
-      if (!extension_loaded("event"))
+      if (!extension_loaded("sysvsem"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need Event extension, http://php.net/manual/en/book.event.php\n");
+	  debug::exit_with_error(6,$this->options['daemon_processname']." need sysvsem extension, http://php.net/manual/en/book.sem.php\n");
+      }
+
+      if (!extension_loaded("sysvshm"))
+      {
+	  debug::exit_with_error(6,$this->options['daemon_processname']." need sysvshm extension, http://php.net/manual/en/book.sem.php\n");
+      }
+
+      if (!extension_loaded("event")||version_compare(phpversion('event'),"1.11.0","<"))
+      {
+	  debug::exit_with_error(6,$this->options['daemon_processname']." need Event >=1.11.0 extension, get last git version at https://bitbucket.org/osmanov/pecl-event/overview\n");
       }
   }
 

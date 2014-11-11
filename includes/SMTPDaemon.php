@@ -28,9 +28,11 @@ class SMTPDaemon extends ProcessDaemon
 {
   public $mailqueue = null;
   public $nb_inbound = 0;
+  public $heartbeatqueue = 15;
 
   public function __construct($basedir) 
   {
+     Debug::$loglevel=LOG_WARNING;
      $this->opts=array(
 		"tls",
 		"crlf",
@@ -184,6 +186,10 @@ class SMTPDaemon extends ProcessDaemon
       {
          $this->options['crlf']=true;
       }
+
+      if (isset($this->options['heartbeatqueue']))
+	 $this->heartbeatqueue=$this->options['heartbeatqueue'];
+
   }
 
   public function HookSyntax($ctx,$args)
@@ -232,9 +238,15 @@ class SMTPDaemon extends ProcessDaemon
 
   public function SuperviseQueue($fd, $what, $ctx) 
   {
+     $now=time();
+     if (!isset($this->lastsupervisequeue)) $this->lastsupervisequeue=$now;
+
+     debug::printf(LOG_DEBUG, "Check for Supervise Queue %s-%s=%s...\n",$now,$this->lastsupervisequeue,$now-$this->lastsupervisequeue);
      // monitor inbound queue fullness every 15s
-     if (time()%15==0||$what===true)
+     if ($now-$this->lastsupervisequeue>=$this->heartbeatqueue||$what===true)
      {
+       $this->lastsupervisequeue=$now;
+       debug::printf(LOG_INFO, "Check if queue are full...\n");
        if ($this->mailqueue==null)
        {
 	 debug::exit_with_error(15,'MailQueue not initialized!');

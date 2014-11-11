@@ -155,7 +155,8 @@ trait HookMgmt
      {
        $backtrace=debug_backtrace();
        $trace=$backtrace[0];
-       //debug::printf(LOG_INFO,"Calling %s Hook in %s:%s...\n",$name,$trace['file'],$trace['line']);
+       $file=strtr($trace['file'],array(Debug::$basedir=>""));
+       debug::printf(LOG_DEBUG,"Calling %s Hook in %s:%s",$name,$file,$trace['line']);
        return call_user_func_array($this->hooks[$name],$ctx);
      }
      return false;
@@ -223,6 +224,7 @@ class EventProcessWorker
     $this->mpm_parent=$mpm_parent;
     $this->markHasStarted($pid);
     $this->setprocesstitle($this->processname,$this->id);
+    $mpm_parent->callHook("childInit",array($mpm_parent,$this));
     $this->event_add($this->workerbase,"ChildSIGTERM", SIGTERM, Event::SIGNAL  | Event::PERSIST, 'SignalEventTERM');
     $this->workerbase->dispatch();
   }
@@ -365,6 +367,7 @@ class EventProcessPoolManager
   public $workers = array(); 
   public $events = array(); 
   public $user = null;
+  public $heartbeat = 1;
 
   public static $maxerror = 5; // 5 errors par 30 seconds per worker
   public static $errorperiod = 30;
@@ -427,7 +430,7 @@ class EventProcessPoolManager
       // to manager child return code and death
       $this->event_add($this->base,"SIGCHLD", SIGCHLD, Event::SIGNAL  | Event::PERSIST, 'SignalEventHLD');
       // to monitor child each seconds
-      $this->event_add($this->base,"HeartBeat", -1,    Event::TIMEOUT | Event::PERSIST, 'HeartBeat',1);
+      $this->event_add($this->base,"HeartBeat", -1,    Event::TIMEOUT | Event::PERSIST, 'HeartBeat',$this->heartbeat);
 
       $this->supervise_workers($this);
       $this->base->dispatch();
@@ -443,6 +446,7 @@ class EventProcessPoolManager
 
   private function supervise_workers($ctx) 
   {
+     debug::printf(LOG_INFO, "Check if worker are down...\n");
      // Spawn workers to fill empty slots
      for($workerId=0;$workerId<$this->maxworker;$workerId++)
      {
@@ -504,7 +508,7 @@ class EventProcessPoolManager
 	// drop root privilege and setuid/gid privilege of the user
 	$this->droprootandsetuid();
 
-        $this->callHook("childInit",array($this,$worker));
+        $this->callHook("prechildInit",array($this,$worker));
         // start the worker
 	$worker->start($worker_pid,$ctx);
 	return true;

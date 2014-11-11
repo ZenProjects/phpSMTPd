@@ -2,30 +2,12 @@
 <?php 
 namespace SuperListd;
 
-// search base installation dir
-$basedir=preg_replace("/(\/)*sbin(\/\.)*$/","",dirname($argv[0]));
-if ($basedir!="")
-{
-  if (!@chdir($basedir))
-  {
-    fprintf(STDERR,"Base Directory found <%s> ar not directory or accesible !\n",$basedir);
-    exit(1);
-  }
-}
-$basedir=getcwd();
+// setup base dire
+require_once("../includes/Setup.php");
 
-if (!is_dir($basedir."/includes"))
-{
-  fprintf(STDERR,"The include path determined <%s/includes> are not a directory!!!!\n",$basedir);
-  fprintf(STDERR,"Error cannot determine where the daemon is installed, cannot start daemon!!!!\n");
-  exit(-1);
-}
+// set the default debug log level 
+Debug::$loglevel=LOG_WARNING;
 
-// set include path based on basedir
-set_include_path(get_include_path() . PATH_SEPARATOR . $basedir."/includes");
-
-require_once("Debug.php");
-require_once("SMTPDaemon.php");
-
+// load SMTPDaemon
 $smtpd = new SMTPDaemon($basedir);
 $smtpd->main($argc,$argv);

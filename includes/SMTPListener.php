@@ -23,14 +23,20 @@ class SMTPListener
   public $options = [];
   public $base = null;
   public $events = [];
+  private $readtimeout = 300;
+  private $writetimeout = 300;
+  private $socket = null;
 
-  public function __construct($base,$connect_string,$options=null) 
+  public function __construct($base,$target,$options=null) 
   {
       $this->options=$options;
       if (isset($options['hostname'])) $this->hostname=$options['hostname'];
       else $this->hostname=NetTool::getFQDNHostname();
 
-      debug::printf(LOG_NOTICE, "Starting Listening SMTP on ".$connect_string." at ".$this->hostname."\n");
+      if (isset($options['read_timeout'])) $this->readtimeout=$options['read_timeout'];
+      if (isset($options['write_timeout'])) $this->writetimeout=$options['write_timeout'];
+
+      debug::printf(LOG_NOTICE, "Starting Listening SMTP on ".$target." at ".$this->hostname."\n");
 
       $this->base = $base;
       if (!$this->base) 
@@ -38,15 +44,26 @@ class SMTPListener
 	  debug::exit_with_error(56,"Couldn't open event base\n");
       }
 
-      if (is_string($connect_string))
+      if (is_string($target))
       {
+	// if string is in form <ip|host>:<port> try to bind the socket
+	// before transmit to EventListener
+	// without that the EventListener::OPT_CLOSE_ON_FREE is systematiquely set
+	if (preg_match("/^(.+):([^:]+)$/",$target,$arr)==1)
+	{
+	  $target=$this->socketListen($arr[1],$arr[2],false);
+	  if ($target===false) 
+	    debug::exit_with_error(57,"Couldn't not connect to %s:%s\n",$arr[1],$arr[2]);
+	  $this->socket=$target;
+	}
+
 	if (!$this->listener = new EventListener($this->base,
 						 [$this, 'ev_accept'],
 						 $this,
+						 EventListener::OPT_REUSEABLE,
 						 //EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE,
-						 EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE,
 						 -1,
-						 $connect_string))
+						 $target))
 	{
             $errno = EventUtil::getLastSocketErrno();
 	    debug::printf(LOG_ERR, "Got an error %d (%s) on the listener. Shutting down.\n",
@@ -61,7 +78,7 @@ class SMTPListener
       }
       else
       {
-        debug::printf(LOG_ERR, "unknown arguments ".print_r($connect_string,true)."\n");
+        debug::printf(LOG_ERR, "unknown arguments ".print_r($target,true)."\n");
         exit(1);
       }
   }
@@ -115,6 +132,57 @@ class SMTPListener
 	 $this->base->exit(NULL);
 	 debug::exit_with_error(58,"Failed creating smtp protocol\n");
      }
+  }
+
+  private function socketListen($sockhost,$sockport,$ipv6=true)
+  {
+    // check if is ip or host
+    if (($iptype=NetTool::is_ip($sockhost))!==false)
+    {
+      $sockip[0]=$sockhost;
+      $sockip['type']=$iptype;
+    }
+    else 
+    {
+      $sockip=NetTool::gethostbyname($sockhost,$ipv6);
+      if ($sockip===false)
+      {
+	 debug::printf(LOG_ERR,"Cannot resolve <%s>!\n",$sockhost);
+	 return false;
+      }
+    }
+
+    debug::printf(LOG_DEBUG,"Try to bind to %s:%s in %s!\n",$sockip[0],$sockport,$sockip['type']===AF_INET?"ipv4":"ipv6");
+
+    // create the socket
+    $socket = socket_create($sockip['type'], SOCK_STREAM, SOL_TCP);
+
+    // set the socket timeout
+    $timeout = array('sec'=>$this->readtimeout,'usec'=>0);
+    socket_set_option($socket,SOL_SOCKET,SO_RCVTIMEO,$timeout);
+    $timeout = array('sec'=>$this->writetimeout,'usec'=>0);
+    socket_set_option($socket,SOL_SOCKET,SO_SNDTIMEO,$timeout);
+
+    // set keepalive tcp option
+    socket_set_option($socket,SOL_SOCKET,SO_KEEPALIVE,1);
+
+    // if on linux try to change KeepAlive counter
+    if (!strncmp("Linux",PHP_OS,5))
+    {
+      socket_set_option($socket,SOL_TCP   ,NetTool::TCP_KEEPIDLE,7200);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPINTVL,75);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPCNT,9);
+    }
+
+    // bind the socket
+    if (!@socket_bind($socket, $sockip[0], $sockport)) 
+    {
+      debug::printf(LOG_ERR,"Cannot Bind Socket to %s:%s - <%s>!\n",$sockip[0],$sockport,socket_strerror(socket_last_error()));
+      socket_close($socket);
+      return false;
+    }
+    debug::printf(LOG_ERR,"Socket bind to %s:%s!\n",$sockip[0],$sockport);
+    return $socket;
   }
 
   function ev_error_listener ($listener, $ctx)

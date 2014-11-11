@@ -21,7 +21,8 @@ class SMTPException extends \Exception
      { 
        $backtrace=debug_backtrace();
        $trace=$backtrace[0];
-       $vargs=array_merge($args,array($trace['file'],$trace['line']));
+       $file=strtr($trace['file'],array(Debug::$basedir=>""));
+       $vargs=array_merge($args,array($file,$trace['line']));
        $format=func_get_arg(1);
        $format=preg_replace("/\n$/","",$format);
        $this->message=vsprintf($format." at %s:%s\n",$vargs);
@@ -46,7 +47,8 @@ class SMTPException extends \Exception
 
 class Debug
 {
-  public static $loglevel = LOG_DEBUG;
+  public static $loglevel = LOG_WARNING;
+  public static $basedir = "";
 
   public function open($logname="SuperListd",$syslog_flag=LOG_PID,$syslog_facility=LOG_MAIL) 
   {
@@ -66,7 +68,8 @@ class Debug
      unset($args[1]);
      $backtrace=debug_backtrace();
      $trace=$backtrace[0];
-     $vargs=array_merge($args,array($trace['file'],$trace['line']));
+     $file=strtr($trace['file'],array(Debug::$basedir=>""));
+     $vargs=array_merge($args,array($file,$trace['line']));
      $format=func_get_arg(1);
      $format=preg_replace("/\n$/","",$format);
      syslog(LOG_ERR,vsprintf("Exit with %s code - ".$format." at %s:%s\n",$vargs));
@@ -96,7 +99,11 @@ class Debug
      { 
        $backtrace=debug_backtrace();
        $trace=$backtrace[0];
-       $vargs=array_merge($args,array($trace['file'],$trace['line']));
+       if (Debug::$basedir!="") 
+       $file=strtr($trace['file'],array(Debug::$basedir=>""));
+	//$file=preg_replace("^".Debug::$basedir,"",$trace['file']);
+       else $file=$trace['file'];
+       $vargs=array_merge($args,array($file,$trace['line']));
        $format=func_get_arg(1);
        $format=preg_replace("/\n$/","",$format);
        syslog(func_get_arg(0),vsprintf($format." at %s:%s\n",$vargs));
