@@ -3,7 +3,7 @@
 namespace SuperListd;
 
 // setup base dire
-require_once("../includes/Setup.php");
+require_once(__DIR__."/../includes/Setup.php");
 
 // set the default debug log level 
 Debug::$loglevel=LOG_WARNING;

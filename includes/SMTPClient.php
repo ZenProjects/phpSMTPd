@@ -11,6 +11,9 @@ use EventUtil;
 include_once("Debug.php");
 include_once("NetTool.php");
 include_once("SSL.php");
+include_once("PropertySetter.php");
+
+
 /*
  * Author: Mathieu CARBONNEAUX 
  * Event based SMTP Client
@@ -22,71 +25,89 @@ include_once("SSL.php");
  * Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
  */
 
+class SMTPConnection
+{
+  use PropertySetter;
+
+  // the eventbufferevent of the connection
+  public $bev = null;
+  // socket information
+  public $socket = null;
+
+  // smtp stats machine
+  public $tls_activated = false;
+  public $closed = false;
+  public $cached = false;
+  public $handcheck = false;
+
+  // connection server information
+  public $server_host=null;
+  public $server_ip=null;
+  public $server_port=null;
+
+  // EHLO server information
+  public $server_estmp=false;
+  public $server_maxsize=null;
+  public $server_tls=false;
+  public $server_8bitmime=false;
+  public $server_xclient=array();
+  public $server_xforward=array();
+
+  // command response parsing return
+  public $server_responses= array();
+  public $server_code = 0;
+
+  public function __construct($bev,$socket,$host,$ip,$port)
+  {
+    $this->bev=$bev;
+    $this->socket=$socket;
+    $this->server_host=$host;
+    $this->server_ip=$host;
+    $this->server_port=$port;
+    $this->cached=false;
+  }
+}
+
 class SMTPClient 
 {
-  const CONNECT 	= 0.1;
-  const HELO 		= 1;
-  const HELO_RESP	= 1.1;
-  const STARTTLS	= 2;
-  const STARTTLS_RESP	= 2.1;
-  const MAILFROM	= 3;
-  const MAILFROM_RESP	= 3.1;
-  const RCPT 		= 4;
-  const RCPT_RESP	= 4.1;
-  const DATA 		= 5;
-  const DATA_RESP 	= 5.1;
-  const QUIT 		= 6;
-  const QUIT_RESP 	= 6.1;
-  const CLOSE 		= 7.1;
-  const STOP		= 8;
+  use PropertySetter;
 
-  const RESPONSE_OK	= true;
-  const RESPONSE_KO	= false;
-  const RESPONSE_CONT	= 100;
+  // cmd state constant
+  const HELO 		= 1;
+  const STARTTLS	= 2;
+  const QUIT 		= 6;
+  const CLOSE 		= 7;
 
   private static $xforward_name = array("NAME","ADDR","PORT","PROTO","HELO","IDENT","SOURCE");
   private static $xclient_name = array("NAME","ADDR","PROTO","HELO");
 
-  public $readtimeout = 30;	        // socket read timeout
-  public $writetimeout = 30;	        // socket write timeout
-  public $ipv6 = false;                 // resolve ipv6 first or only ipv4 (ipv4 only by default)
-  public $tls = false;                  // activate Starttls Client Support if the server annonce support (tls is off by default)
-  public $forceehlo = true;             // send by default EHLO if forceehlo is set to true or if the server as the ESMTP support
-  public $ssl_verify_peer = false;      // ssl client verify peer
-  public $ssl_allow_self_signed = true; // ssl client accept self signed server certificat
-  public $mxport = 25;			// default port for mx connection
-  public $connectionreuse = false;	// tel where reuse or not the connection, they impact
+  // so_keepalive default timming
+  protected $tcp_keepidle = 7200; // The maximum number of keepalive probes TCP should send before dropping the connection. This option should not be used in code intended to be portable.
+  protected $tcp_keepintvl = 75;  // The time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probes, 
+                                  // if the socket option SO_KEEPALIVE has been set on this socket. This option should not be used in code intended to be portable.
+  protected $tcp_keepcnt = 9;     // The time (in seconds) between individual keepalive probes. This option should not be used in code intended to be portable.
 
-  public $returncode = false;
+  // socket default read/write timeout
+  protected $readtimeout = 30;	        // socket read timeout in seconds
+  protected $writetimeout = 30;	        // socket write timeout in seconds
+
+  protected $ipv6 = false;                 // resolve ipv6 first or only ipv4 (ipv4 only by default)
+  protected $tls = false;                  // activate Starttls Client Support if the server annonce support (tls is off by default)
+  protected $forceehlo = true;             // send by default EHLO if forceehlo is set to true or if the server as the ESMTP support
+  protected $ssl_verify_peer = false;      // ssl client verify peer
+  protected $ssl_allow_self_signed = true; // ssl client accept self signed server certificat
+  protected $mxport = 25;		   // default port for mx connection
+  protected $connectionreuse = true;	   // tel where reuse or not the connection, they impact
+  protected $grouprecipient = true;        // one transaction for all recipient or one per recipient for each server
 
   // the eventbase used to exchange smtp message to the server
   private $base = null;
-  // the eventbufferevent of the connection
-  private $bev = null;
   // sslcontext of the starttls connection
   private $sslctx = null;
 
   // socket connection cache
-  // contain array('fd'=>$socket,'nb_rcpt'=><nb mail sent>,'startconn'=><nb seconds from 01/01/1970>);
-  private $socket_cache = array();
-
-  // stats machine position
-  private $state = self::CONNECT;
-  private $tls_activated = false;
-
-  // current recipient to send message
-  private $recipient = null; 
-
-  // EHLO server information
-  private $server_host=null;
-  private $server_ip=null;
-  private $server_port=null;
-  private $server_estmp=false;
-  private $server_maxsize=null;
-  private $server_tls=false;
-  private $server_8bitmime=false;
-  private $server_xclient=array();
-  private $server_xforward=array();
+  // contain SMTPConnection object
+  private $smtp_connection_cache = array();
 
   // message informations
   private $helohost = null;  // hostname send by EHLO/HELO
@@ -95,15 +116,11 @@ class SMTPClient
   private $data = null;      // the message data
   private $datalen = null;   // the message data len
 
-  // command response parsing return
-  private $arguments = array();
-  private $code = 0;
-
   ////////////////////////////////////////////////////////////////////////////
   // Constructor
   ////////////////////////////////////////////////////////////////////////////
 
-  public function __construct($eventbase=null,$socketcache=true)
+  public function __construct($eventbase=null)
   {
     if ($eventbase==null) $this->base = new EventBase();
     else $this->base = $eventbase;
@@ -114,7 +131,15 @@ class SMTPClient
     if (!EventUtil::sslRandPoll()) 
 	throw new SMTPException(LOG_ERR,"EventUtil::sslRandPoll failed\n");
 
-    $this->connectionreuse=$socketcache;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // desctructor
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function __destruct()
+  {
+    if (isset($this->bev)) $this->bev->free();
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -124,6 +149,9 @@ class SMTPClient
   public function sendMessage($relayhost=null,$relayport=25)
   {
     debug::printf(LOG_INFO,"SMTPClient Send begin");
+
+    // force reuseconnection if grouperecipient are set
+    if ($this->grouprecipient===true) $this->connectionreuse=true;
 
     if ($this->tls === true)
     {
@@ -155,17 +183,6 @@ class SMTPClient
     if ($this->data===null)
        throw new SMTPException(LOG_ERR,"Data attribut not set!\n");
 
-    if ($relayhost!==null) 
-    {
-       debug::printf(LOG_INFO,"Use the relay host <%s:%s> to send the message...\n",$relayhost,$relayport);
-       $retcachedbev=$this->getCachedBufferEvent($relayhost,$relayport);
-       if ($retcachedbev===false) 
-	   throw new SMTPException(LOG_ERR,"Cannot connect to the host %s:%s!\n",$relayhost,$relayport);
-       $this->bev=$retcachedbev['bev'];
-       $this->socket=$retcachedbev['socket'];
-    }
-
-      $flag=false;
     debug::print_r(LOG_DEBUG,$this->rcpt);
     foreach($this->rcpt as $recipient)
     {
@@ -178,103 +195,141 @@ class SMTPClient
 	    throw new SMTPException(LOG_ERR,"No MX found for host %s!\n",$recipient['domain']);
 	debug::print_r(LOG_DEBUG,$mxs);
 
-	$retcachedbev=false;
+        $smtp_connection=false;
 	foreach($mxs as $mxhost => $mxweight)
 	{
-	  $mxhost="127.0.0.1";
-	  $this->mxport=2025;
+	  //$mxhost="127.0.0.1";
+	  //$this->mxport=2025;
 	  debug::printf(LOG_INFO,"Use the MX host <%s:25> for this recipient to send the message...\n",$mxhost);
-	  $retcachedbev=$this->getCachedBufferEvent($mxhost,$this->mxport);
-	  if ($retcachedbev!==false) 
-	      break;
+	  $smtp_connection=$this->getCachedBufferEvent($mxhost,$this->mxport);
+	  if ($smtp_connection!==false) 
+	  {
+	      // initialisze smtp exchange: receive server helo, send ehlo/helo and do starttls handcheck
+              // if the connexion are not already handled (in cache)
+	      if ($this->_SMTP_ConnectionHandCheck($smtp_connection)===true) 
+	        break; // if the handcheck fail try next mx
+	      debug::printf(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+	  }
 	  debug::printf(LOG_ERR,"Cannot connect to <%s> try next one!\n",$mxhost.":25");
 	}
-	if ($retcachedbev===false)
+	if ($smtp_connection===false)
 	      throw new SMTPException(LOG_ERR,"Cannot connect to the mx host!\n");
-	$this->bev=$retcachedbev['bev'];
-	$this->socket=$retcachedbev['socket'];
       }
-
-      // clear all state property
-      $this->clear();
-      if ($flag===true)
-      {
-	 $this->bev->enable(Event::READ | Event::WRITE);
-	 $this->state=self::MAILFROM;
-	 $this->bev->write("MAIL FROM:<".$this->mailfrom.">\r\n");
-	 debug::printf(LOG_INFO,"> MAIL FROM:<%s>\n",$this->mailfrom);
-      }
-      $this->recipient=$recipient['recipient'];
-
-      debug::printf(LOG_DEBUG,"Dispatch begin!\n");
-      /* Distribue les événements en attente */
-      $this->base->dispatch();
-      debug::printf(LOG_DEBUG,"Dispatch end!\n");
-      $flag=true;
-
-      if ($relayhost===null&&$this->connectionreuse!==true) 
-      {
-	if (@isset($this->bev)) 
-	{
-	  $this->bev->close();
-	  $this->bev->free();
-	}
-	$this->bev=null;
-        //socket_close($socket);
-      }
-      if ($this->returncode['return']===false)
-	 throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$this->returncode['code'],implode(",",$this->returncode['arguments']));
       else
-         debug::printf(LOG_INFO,"Message Sended!\n");
+      {
+	 debug::printf(LOG_INFO,"Use the relay host <%s:%s> to send the message...\n",$relayhost,$relayport);
+	 $smtp_connection=$this->getCachedBufferEvent($relayhost,$relayport);
+	 if ($smtp_connection===false) 
+	     throw new SMTPException(LOG_ERR,"Cannot connect to the host %s:%s!\n",$relayhost,$relayport);
+	 // initialisze smtp exchange: receive server helo, send ehlo/helo and do starttls handcheck
+	 // if the connexion are not already handled (in cache)
+	 if ($this->_SMTP_ConnectionHandCheck($smtp_connection)!==true) // if the SMTP handcheck fail abort
+		throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+      }
 
+      if ($this->grouprecipient===true)
+      {
+	 // first cmd after smtp handcheck
+	 if ($smtp_connection->cached===false)
+	 {
+	    // send mailfrom, for one transaction for all recipient
+	    if ($this->_SMTP_MAILFROM($smtp_connection,$this->mailfrom)!==true)
+	      throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+	 }
+
+	 debug::printf(LOG_DEBUG,"send mailfrom, rcpt to and data, one transaction for ALL recipient\n");
+	 // send mailfrom, rcpt to and data, one transaction for ALL recipient
+	 $retcode=$this->_SMTP_RCPT($smtp_connection,$recipient['recipient']);
+	 if ($retcode===false)
+	    throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+      }
+      else
+      {
+	 debug::printf(LOG_DEBUG,"send mailfrom, rcpt to and data, one transaction PER recipient\n");
+	 // send mailfrom, rcpt to and data, one transaction PER recipient
+	 $retcode=$this->_SMTP_MessageTransaction($smtp_connection,$this->mailfrom,$recipient['recipient'],$this->data);
+	 if ($retcode===false)
+	    throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+
+	 if ($this->connectionreuse===false) $this->_SMTP_QUIT($smtp_connection);
+         debug::printf(LOG_INFO,"Message Sended!\n");
+      }
+    }
+
+    if ($this->connectionreuse===true||$this->grouprecipient===true) 
+    {
+      if ($this->connectionreuse===true)
+      {
+	foreach($this->smtp_connection_cache as $key => $smtp_connection)
+	{
+	  if ($this->grouprecipient===true)
+	  {
+	    if ($this->_SMTP_DATA($smtp_connection)!==true)
+	      throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+	    if ($this->_SMTP_DATASend($smtp_connection,$this->data)!==true)
+	      throw new SMTPException(LOG_ERR,"SMTP Error CODE:%s - \"%s\"\n",$smtp_connection->server_code,implode(",",$smtp_connection->server_responses));
+	    debug::printf(LOG_INFO,"Message Sended!\n");
+	  }
+          $this->_SMTP_QUIT($smtp_connection);
+	}
+      }
+      else
+      {
+        $this->_SMTP_QUIT($smtp_connection);
+      }
     }
 
     debug::printf(LOG_INFO,"SMTPClient Send end");
     return true;
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // get smtp connection from cache if in cache or new connection
+  ////////////////////////////////////////////////////////////////////////////
+
   private function getCachedBufferEvent($host,$port)
   {
-      $bev_key=$host.":".$port;
+      $smtp_connection_key=$host.":".$port;
       if ($this->connectionreuse===true)
       {
-	debug::printf(LOG_DEBUG,"==> try to get BufferEvent from cache for:%s\n",$bev_key);
-	if (isset($this->bev_cache[$bev_key]))
+	debug::printf(LOG_DEBUG,"==> try to get BufferEvent from cache for:%s\n",$smtp_connection_key);
+	if (isset($this->smtp_connection_cache[$smtp_connection_key]))
 	{
-	  debug::printf(LOG_DEBUG,"==> there a BufferEvent in cache for:%s\n",$bev_key);
-	  debug::printf(LOG_DEBUG,var_dump($this->bev_cache[$bev_key],true));
-	  $bev_cached=$this->bev_cache[$bev_key];
-	  if (is_a($bev_cached['bev'],"EventBufferEvent")&& 
-	      is_a($bev_cached['bev']->input,"EventBuffer")&& 
-	      is_a($bev_cached['bev']->output,"EventBuffer")&& 
-	      is_resource($bev_cached['socket'])) 
+	  debug::printf(LOG_DEBUG,"==> there a BufferEvent in cache for:%s\n",$smtp_connection_key);
+	  $smtpconn_cached=$this->smtp_connection_cache[$smtp_connection_key];
+	  if (is_a($smtpconn_cached->bev,"EventBufferEvent")&& 
+	      is_a($smtpconn_cached->bev->input,"EventBuffer")&& 
+	      is_a($smtpconn_cached->bev->output,"EventBuffer")&& 
+	      is_resource($smtpconn_cached->socket)) 
 	  {
-	    debug::printf(LOG_DEBUG,"==> use BufferEvent from cache for:%s\n",$bev_key);
-	    $socket=$bev_cached['socket'];
+	    debug::printf(LOG_DEBUG,"==> use BufferEvent from cache for:%s\n",$smtp_connection_key);
+	    $socket=$smtpconn_cached->socket;
 
 	    // check the connection of this socket
 	    $buf=null;
 	    if (($ret=@socket_send($socket,$buf,0,0))===0)
 	    {
-	       debug::printf(LOG_DEBUG,"==> Got BufferEvent from cache for:%s\n",$bev_key);
-	       return $bev_cached;
+	       debug::printf(LOG_DEBUG,"==> Got BufferEvent from cache for:%s\n",$smtp_connection_key);
+	       $smtpconn_cached->cached=true;
+	       return $smtpconn_cached;
 	    }
 	    else 
-	       debug::printf(LOG_ERR,"ERROR Socket is closed reopen new one for:%s\n",$bev_key);
+	       debug::printf(LOG_ERR,"ERROR Socket is closed reopen new one for:%s\n",$smtp_connection_key);
 	  }
 	  else
 	  {
-	    debug::printf(LOG_ERR,"ERROR BEV or socket not in good type for:%s remove from the cache and reopen new one !\n",$bev_key);
-	    if (is_resource($bev_cached['socket']))
+	    debug::printf(LOG_DEBUG,var_dump($smtpconn_cached,true));
+	    debug::printf(LOG_ERR,"ERROR BEV or socket not in good type for:%s remove from the cache and reopen new one !\n",$smtp_connection_key);
+	    if (is_resource($smtpconn_cached->socket))
 	    {
-	      socket_close($bev_cached['socket']);
+	      socket_close($smtpconn_cached->socket);
 	    }
-	    if (is_a($bev_cached['bev'],"EventBufferEvent"))
+	    if (is_a($smtpconn_cached->bev,"EventBufferEvent"))
 	    {
-	      $bev_cached['bev']->close();
-	      $bev_cached['bev']->free();
+	      $smtpconn_cached->bev->close();
+	      $smtpconn_cached->bev->free();
 	    }
-	    unset($this->bev_cache[$bev_key]);
+	    unset($this->smtp_connection_cache[$smtp_connection_key]);
 	  }
 	}
       }
@@ -285,28 +340,24 @@ class SMTPClient
       $options=0;
       //$options |= EventBufferEvent::OPT_CLOSE_ON_FREE;
       //$options |= EventBufferEvent::OPT_DEFER_CALLBACKS;
-      $bev = new EventBufferEvent($this->base, $socket, $options);
+      $bev = new EventBufferEvent($this->base, $socket[0], $options);
       if (!$bev) 
 	 throw new SMTPException(LOG_ERR,"Fail when creating socket bufferevent\n");
 
-      $bev->setCallbacks(array($this,"readcb"), /* writecb */ NULL, array($this,"eventcb"), $this);
-      $bev->enable(Event::READ | Event::WRITE);
-      $bev->setTimeouts($this->readtimeout,$this->writetimeout);
-      $retbev=array('bev'=>$bev, 
-                    'socket'=>$socket,
-		    'host'=>$host,
-		    'port'=>$port);
-      $this->server_host=$host;
-      $this->server_port=$port;
+      $ret_smtp_connection= new SMTPConnection($bev,$socket[0],$host,$socket[1],$port);
+      $ret_smtp_connection->bev->setTimeouts($this->readtimeout,$this->writetimeout);
+      $ret_smtp_connection->bev->setCallbacks(array($this,"ev_readcb"), /* writecb */ NULL, array($this,"ev_eventcb"), $ret_smtp_connection);
+      $ret_smtp_connection->bev->enable(Event::READ| Event::WRITE);
       
-      debug::printf(LOG_DEBUG,var_dump($retbev,true));
+      debug::printf(LOG_DEBUG,var_dump($ret_smtp_connection,true));
       if ($this->connectionreuse===true)
       {
-	 debug::printf(LOG_DEBUG,"==> BufferEvent stored in cache for:%s\n",$bev_key);
-	 $this->bev_cache[$bev_key]=$retbev;
+	 debug::printf(LOG_DEBUG,"==> BufferEvent stored in cache for:%s\n",$smtp_connection_key);
+	 $this->smtp_connection_cache[$smtp_connection_key]=$ret_smtp_connection;
       }
-      return $retbev;
+      return $ret_smtp_connection;
   }
+
   ////////////////////////////////////////////////////////////////////////////
   // Socket connection to the targer SMTP host
   ////////////////////////////////////////////////////////////////////////////
@@ -346,9 +397,9 @@ class SMTPClient
     // if on linux try to change KeepAlive counter
     if (!strncmp("Linux",PHP_OS,5))
     {
-      socket_set_option($socket,SOL_TCP   ,NetTool::TCP_KEEPIDLE,7200);
-      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPINTVL,75);
-      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPCNT,9);
+      socket_set_option($socket,SOL_TCP   ,NetTool::TCP_KEEPIDLE,$this->tcp_keepidle);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPINTVL,$this->tcp_keepintvl);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPCNT,$this->tcp_keepcnt);
     }
 
     // connect the socket
@@ -359,10 +410,80 @@ class SMTPClient
       return false;
     }
     debug::printf(LOG_ERR,"Connected to %s:%s!\n",$sockip[0],$sockport);
-    $this->server_ip=$sockip;
-    return $socket;
+    return array($socket,$sockip);
   }
 
+  //////////////////////////////////////////////////////////////////////////
+  // Set the application so_keepalive socket option timing,
+  // it's the equivalent for the application level of this system parametter :
+  // net.ipv4.tcp_keepalive_time = 7200
+  // net.ipv4.tcp_keepalive_probes = 9
+  // net.ipv4.tcp_keepalive_intvl = 75
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function setKeepAliveTiming($keepidle,$keepintvl,$keepcnt)
+  {
+     // so_keepalive default timming
+     $this->tcp_keepidle = 7200;
+     $this->tcp_keepintvl = 75;
+     $this->tcp_keepcnt = 9;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // set socket default read/write timeout
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function setTimeout($readtimeout,$writetimeout)
+  {
+     $this->readtimeout = $readtimeout;	    	    // socket read timeout
+     $this->writetimeout = $writetimeout;	    // socket write timeout
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // set the default port for mx connection
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function setDefaultMXPort($port)
+  {
+   $this->mxport = $port;			
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // send by default EHLO if forceehlo is set to true or if the server as the ESMTP support
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function disableForceEHLO()
+  {
+    $this->forceehlo = false;             
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // diable the reuse of the connection for each recipient
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function disableConenctionReuse()
+  {
+    $this->connectionreuse = false;	
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // disable the use of one transaction for all recipient
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function disableGroupRecipient()
+  {
+    $this->grouprecipient = false;       
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // enable IPV6
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function enableIPV6()
+  {
+     $this->ipv6=true;
+  }
+ 
   ////////////////////////////////////////////////////////////////////////////
   // enableTLS
   ////////////////////////////////////////////////////////////////////////////
@@ -420,75 +541,51 @@ class SMTPClient
   }
 
   ////////////////////////////////////////////////////////////////////////////
-  // Clear stat machine 
-  ////////////////////////////////////////////////////////////////////////////
-
-  public function clear($all=false)
-  {
-    if ($all===true)
-    {
-      debug::printf(LOG_DEBUG,"Clear all Attribut...\n");
-      if (isset($this->bev)) $this->bev->free();
-      $this->bev = null;
-      $this->helohost = null;  
-      $this->mailfrom = null; 
-      $this->rcpt = array(); 
-      $this->data = null;
-      $this->datalen = null;
-    }
-    else
-      debug::printf(LOG_DEBUG,"Clear state attribut only...\n");
-
-    $this->server_estmp=false;
-    $this->server_maxsize=null;
-    $this->server_tls=false;
-    $this->server_8bitmime=false;
-    $this->server_xclient=array();
-    $this->server_xforward=array();
-
-    $this->tls_activated=false;
-    $this->recipient = null;
-    $this->state = self::CONNECT;
-    $this->returncode=false;
-    $this->arguments = array();
-    $this->code = 0;
-  }
-
-  ////////////////////////////////////////////////////////////////////////////
   // finish reading (lingering) and close/exit
   ////////////////////////////////////////////////////////////////////////////
 
-  private function ev_close($bev,$ctx,$drain=false) 
+  private function ev_close($smtp_connection,$drain=false) 
   {
-       $output_buffer=$bev->getOutput();
-       $input_buffer=$bev->getInput();
-       if ($output_buffer->length>0) 
+       debug::printf(LOG_DEBUG,"ev_close...\n");
+       if (is_a($smtp_connection->bev,"EventBufferEvent")&& 
+	   is_a($smtp_connection->bev->input,"EventBuffer")&& 
+	   is_a($smtp_connection->bev->output,"EventBuffer")&&
+	   $smtp_connection->closed!==true)
        {
-	     $bev->disable(Event::READ);
-	     // drain input if needed
-	     if ($drain) while($input_buffer->length > 0) $input_buffer->drain(256);
+	  debug::printf(LOG_DEBUG,"ev_close bev is open go to close...\n");
 
-	     /* We still have to flush data from the other
-	      * side, but when that's done, close the other
-	      * side. */
-	     $bev->setCallbacks(NULL, [$this, 'ev_close_on_finished_writecb'], NULL, $ctx);
-       } else {
-	     /* We have nothing left to say to the other
-	      * side; close it. */
-	     $bev->disable(Event::READ | Event::WRITE);
-	     // drain input if needed
-	     if ($drain) while($input_buffer->length > 0) $input_buffer->drain(256);
+	  $output_buffer=$smtp_connection->bev->getOutput();
+	  $input_buffer=$smtp_connection->bev->getInput();
+	  if ($output_buffer->length>0) 
+	  {
+		$smtp_connection->bev->disable(Event::READ);
+		// drain input if needed
+		if ($drain) while($input_buffer->length > 0) $input_buffer->drain(256);
 
-	     // if in connection reuse they not close only exit the loop
-	     if ($this->connectionreuse!==true)
-	     {
-	       //if (is_resource($bev->fd)) socket_close($bev->fd);
-	       //if (is_resource($bev->fd)) socket_close($ctx->socket);
-	       $bev->close();
-	       $bev->free();
-	     }
-	     else
-	       $this->base->exit(NULL);
+		/* We still have to flush data from the other
+		 * side, but when that's done, close the other
+		 * side. */
+		$smtp_connection->bev->setCallbacks(NULL, [$this, 'ev_close_on_finished_writecb'], NULL, $smtp_connection);
+	  } else {
+		/* We have nothing left to say to the other
+		 * side; close it. */
+		$smtp_connection->bev->disable(Event::READ | Event::WRITE);
+		// drain input if needed
+		if ($drain) while($input_buffer->length > 0) $input_buffer->drain(256);
+
+		// if in connection reuse they not close only exit the loop
+		if ($this->connectionreuse!==true)
+		{
+		  //if (is_resource($this->bev->fd)) socket_close($this->bev->fd);
+		  //if (is_resource($this->bev->fd)) socket_close($this->socket);
+		  $smtp_connection->bev->close();
+		  $smtp_connection->bev->free();
+		}
+		else
+		  $this->base->exit(NULL);
+	        debug::printf(LOG_DEBUG,"ev_close bev are closed...\n");
+		$smtp_connection->closed=true;
+	  }
        }
   }
 
@@ -496,366 +593,128 @@ class SMTPClient
   // finish sending, lingering output event
   ////////////////////////////////////////////////////////////////////////////
 
-  public function ev_close_on_finished_writecb($bev, $ctx) 
+  public function ev_close_on_finished_writecb($bev, $smtp_connection) 
   {
       // when all the output buffer are drained go to close/exit
       if ($bev->getOutput()->length==0)
       {
 	$bev->disable(Event::READ | Event::WRITE);
-	// if in connection reuse they not close only exit the loop
-	if ($this->connectionreuse!==true)
-	{
-	  //if (is_resource($bev->fd)) socket_close($bev->fd);
-	  //if (is_resource($bev->fd)) socket_close($ctx->socket);
-	  $bev->close();
-	  $bev->free();
-	}
-	else
-	  $this->base->exit(NULL);
+	$bev->close();
+	$bev->free();
+	debug::printf(LOG_DEBUG,"ev_close bev are closed...\n");
+	$smtp_connection->closed=true;
       }
   }
 
-  ////////////////////////////////////////////////////////////////////////////
-  // upgrade the socket connection to TLS (after STARTTLS)
-  ////////////////////////////////////////////////////////////////////////////
-
-  private function starttls($ctx)
-  {	
-     debug::printf(LOG_INFO,"Entering in TLS Hand check...\n");
-     $bev = EventBufferEvent::sslSocket($this->base,
-	 $this->bev->fd, $this->sslctx,
-	 EventBufferEvent::SSL_CONNECTING | EventBufferEvent::SSL_OPEN);
-     if (!$bev) 
-     {
-	 $sslerror=$bev->sslError();
-	 debug::printf(LOG_ERR,"Fail when creating socket bufferevent in ssl: %s\n",$sslerror);
-         $this->bev->close();
-         $this->bev->free();
-         $bev->free();
-	 return false;
-     }
-     $this->bev->free();
-     $this->bev=$bev;
-     $this->bev->setCallbacks(array($this,"readcb"), /* writecb */ NULL, array($this,"eventcb"), $this);
-     $this->bev->enable(Event::READ | Event::WRITE);
-     $this->bev->setTimeouts($this->readtimeout,$this->writetimeout);
-     $this->tls_activated=true;
-
-     return true;
-  }
-
-
-/*
-$statemachine= array(
-  self::STEP_CONNECT	=> array(self::REPONSE_220 	=> self::STEP_EHLO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_EHLO	=> array(self::REPONSE_250 	=> self::STEP_POSTEHLO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_HELO,
-				 ),
-  self::STEP_HELO	=> array(self::REPONSE_250	=> self::STEP_POSTEHLO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_POSTEHLO	=> array(self::REPONSE_250 	=> array(self::REPONSE_STARTTLS => self::STEP_STARTLS,
-                                                                 self::REPONSE_DEFAULT => self::STEP_MAILFROM),
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_STARTLS	=> array(self::REPONSE_220 	=> self::STEP_EHLO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_MAILFROM	=> array(self::REPONSE_250 	=> self::STEP_RCPTTO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_RCPTTO	=> array(self::REPONSE_250 	=> self::STEP_RCPTTO,
-                             	 self::REPONSE_251	=> self::STEP_RCPTTO,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_DATA	=> array(self::REPONSE_354 	=> self::STEP_SENDDATA,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-  self::STEP_SENDDATA	=> array(self::REPONSE_354 	=> self::STEP_SENDDATA,
-                             	 self::REPONSE_DEFAULT	=> self::STEP_CLOSE,
-				 ),
-);
-*/
 
   ////////////////////////////////////////////////////////////////////////////
-  // read event, where all the state machin reside
+  // error/timeout/eof/connect event callback
   ////////////////////////////////////////////////////////////////////////////
 
-  public function readcb($bev, $ctx) 
+  public function ev_eventcb($bev, $events, $smtp_connection) 
   {
-      switch ($this->state) 
+      if ($events & EventBufferEvent::CONNECTED) 
       {
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::CONNECT:
-	 $retcode=$this->parse_response($bev,$ctx,220);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"Connect response error, code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 // check if are ESMTP server
-	 if (preg_match("/ESMTP/i",$retcode['arguments'][0])==1) 
-	 {
-	   debug::printf(LOG_INFO,"ESMTP Server detected...\n");
-	   $this->server_estmp=true;
-	 }
-	 debug::printf(LOG_DEBUG,"Connect OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $this->state=self::HELO;
+	  debug::printf(LOG_INFO,"Connected.\n");
+          if ($smtp_connection->tls_activated===true)
+	  {
+	    $smtp_connection->server_responses[]="TLS Handcheck succesfull!!";
+	    $smtp_connection->server_code = true;
+	    debug::printf(LOG_INFO,"Now in TLS...\n");
+	    /*
+	    $smtp_connection_key=$smtp_connection->server_host.":".$smtp_connection->server_port;
+	    if (isset($this->smtp_connection_cache[$smtp_connection_key]))
+	    {
+	       debug::printf(LOG_INFO,"Replace in cache the TLS BufferEvent...\n");
+	       $this->smtp_connection_cache[$smtp_connection_key]->bev=$smtp_connection->bev;
+	    }
+	    */
+	    debug::printf(LOG_NOTICE, "Cipher           : %s\n",implode("/",preg_split("/\s+/",trim($bev->sslGetCipherInfo()))));
+	    debug::printf(LOG_NOTICE, "CipherVersion    : %s\n",$bev->sslGetCipherVersion());
+	    debug::printf(LOG_NOTICE, "CipherName       : %s\n",$bev->sslGetCipherName());
+	    debug::printf(LOG_NOTICE, "CipherProtocol   : %s\n",$bev->sslGetProtocol());
+	    $this->base->exit(NULL);
+	  }
+	  return;
+      } 
+      elseif ($events & (EventBufferEvent::ERROR))
+      {
+	  $dnserror=$smtp_connection->bev->getDnsErrorString();
+	  $sslerror=$smtp_connection->bev->sslError();
+	  $sockcode=EventUtil::getLastSocketErrno();
+	  $sockError=EventUtil::getLastSocketError();
 
-	 // send by default EHLO if forceehlo is set to true or if the server as the ESMTP support
-	 if ($this->forceehlo===true||$this->estmp===true)
-	 {
-	   $bev->write("EHLO ".$this->helohost."\r\n");
-	   debug::printf(LOG_INFO,"> EHLO %s\n",$this->helohost);
-	 }
-	 // Send HELO
-	 else
-	 {
-	   $bev->write("HELO ".$this->helohost."\r\n");
-	   debug::printf(LOG_INFO,"> HELO %s\n",$this->helohost);
-	 }
-	 break;
+	  $arguments=array();
+	  if ($sockError!=0) 
+	  {
+	    $arguments[]="Socket Error:".$sockError.'('.$sockcode.')';
+	    $smtp_connection->server_error = $sockcode;
+	  }
+	  else if ($sslerror!==false) 
+	  {
+	   $arguments[]="SSL Error:".$sslerror;
+	   $smtp_connection->server_error = $sslerror;
+	  }
+	  else if ($dnserror!="") 
+	  {
+	    $arguments[]="DNS ERROR:".$dnserror;
+	    $smtp_connection->server_error = $dnserror;
+	  }
 
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::HELO:
-	 $retcode=$this->parse_response($bev,$ctx,250);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"EHLO <%s>, response error, code: %s arguments: %s \n",$this->helohost,$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 debug::printf(LOG_DEBUG,"EHLO OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
+	  debug::printf(LOG_ERR,"Erreur msg:<%s>\n",implode(',',$arguments));
 
-	 //debug::print_r(LOG_DEBUG,$retcode);
-	 // parse extension reponse
-	 $this->server_maxsize=0;
-	 $this->server_tls=false;
-	 $this->server_8bitmime=false;
-	 $this->server_xforward=null;
-	 $this->server_xclient=null;
-
-	 foreach($retcode['arguments'] as $value)
-	 {
-	   //debug::printf(LOG_DEBUG,"Check response arguments: %s \n",$value);
-
-	   // http://www.postfix.org/XFORWARD_README.html
-	   if (preg_match('/^XFORWARD\s(.+)/i', $value, $arr)==1)
-	   {
-	     debug::printf(LOG_INFO,"The Server annonce XFORWARD support\n");
-	     $xforward_ret=$this->xcmdheloargs_check($arr[1],self::$xforward_name);
-	     if (isset($xforward_ret[1]))
-	     foreach($xforward_ret[1] as $args)
-	        debug::printf(LOG_INFO,"The Server annonce XFORWARD unknown attribut:%s, go to ignore it\n",$args);
-	     $this->server_xforward=$xforward_ret;
-	     debug::print_r(LOG_DEBUG,$xforward_ret);
-	     continue;
-	   }
-
-	   // http://www.postfix.org/XCLIENT_README.html
-	   if (preg_match('/^XCLIENT\s(.+)/i', $value, $arr)==1)
-	   {
-	     debug::printf(LOG_INFO,"The Server annonce XCLIENT support\n");
-	     $xclient_ret=$this->xcmdheloargs_check($arr[1],self::$xclient_name);
-	     if (isset($xclient_ret[1]))
-	     foreach($xclient_ret[1] as $args)
-	        debug::printf(LOG_INFO,"The Server annonce XCLIENT unknown attribut:%s, go to ignore it\n",$args);
-	     $this->server_xclient=$xclient_ret;
-	     debug::print_r(LOG_DEBUG,$xclient_ret);
-	     continue;
-	   }
-
-	   // 8BITMIME support
-	   // http://cr.yp.to/smtp/8bitmime.html
-	   if (preg_match('/^8BITMIME/i', $value)==1)
-	   {
-	     debug::printf(LOG_INFO,"The Server annonce 8bit Mime support\n");
-	     $this->server_8bitmime=true;
-	     continue;
-	   }
-
-	   // match startls support
-	   // http://en.wikipedia.org/wiki/STARTTLS
-	   // https://tools.ietf.org/html/rfc3207
-	   if (preg_match('/^STARTTLS/i', $value)==1)
-	   {
-	     if ($this->tls_activated===true)
-	       debug::printf(LOG_INFO,"The Server annonce STARTTLS support in TLS connection, is not conforme to rfc3207!\n");
-
-	     debug::printf(LOG_INFO,"The Server annonce STARTTLS support\n");
-	     $this->server_tls=true;
-	     continue;
-	   }
-
-	   // match size support
-	   // http://cr.yp.to/smtp/size.html
-	   if (preg_match('/^SIZE ([0-9]*)/i', $value, $sizes)==1)
-	   {
-	     $this->server_maxsize=$sizes[1];
-	     debug::printf(LOG_INFO,"The Server annonce Message Max Size of %s\n",$this->server_maxsize);
-	     continue;
-	   }
-	 }
-
-	 // check message size with server size receved
-	 if ($this->server_maxsize>0&&$this->datalen>$this->server_maxsize)
-	 {
-	   debug::printf(LOG_ERR,"Message Size %s is grether than max message size %s - abort!\n",$this->datalen,$this->server_maxsize);
-	   $this->state=self::CLOSE;
-	   $bev->write("QUIT\r\n");
-	   debug::printf(LOG_INFO,"> QUIT\n");
-	   break;
-	 }
-	 debug::print_r(LOG_DEBUG,$retcode['arguments']);
-
-	 // check STARTTLS Support and start tls session if the client is configured to use tls
-	 if ($this->tls===true&&$this->server_tls===true&&$this->tls_activated!==true)
-	 {
-	   $this->state=self::STARTTLS;
-	   $bev->write("STARTTLS\r\n");
-	   debug::printf(LOG_INFO,"> MAIL FROM:<%s>\n",$this->mailfrom);
-	   break;
-	 }
-
-	 $this->state=self::MAILFROM;
-	 $bev->write("MAIL FROM:<".$this->mailfrom.">\r\n");
-	 debug::printf(LOG_INFO,"> MAIL FROM:<%s>\n",$this->mailfrom);
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::STARTTLS:
-	 $retcode=$this->parse_response($bev,$ctx,220);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"STARTTLS, response error, code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-            sleep(3);
-	    return;
-	 }
-	 debug::printf(LOG_DEBUG,"STARTTLS OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-
-	 // go tls handcheck
-	 debug::printf(LOG_INFO,"Go in TLS mode...\n");
-	 if ($ctx->starttls($ctx)===false)
-	 {
-	   debug::printf(LOG_ERR,"Error STARTTLS Close connection...\n");
-	   $this->ev_close($bev,$ctx);
-	   $arguments=array("STARTTLS error");
-	   $this->returncode=array('return'=>false, 'code'=>-1,'arguments'=>$arguments);
-	   return;
-	 }
-
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::MAILFROM:
-	 $retcode=$this->parse_response($bev,$ctx,250);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"MAIL FROM <%s>, response error, code: %s arguments: %s \n",$this->mailfrom,$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 debug::printf(LOG_DEBUG,"MAIL FROM OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $this->state=self::RCPT;
-	 $bev->write("RCPT TO:<".$this->recipient.">\r\n");
-	 debug::printf(LOG_INFO,"> RCPT TO:<%s>\n",$this->recipient);
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::RCPT:
-	 $retcode=$this->parse_response($bev,$ctx,array(250,251));
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"RCPT TO <%s>, response error, code: %s arguments: %s \n",$this->recipient,$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 if ($retcode['code']===251)
-	   debug::printf(LOG_NOTICE,"RCPT TO OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 else
-	   debug::printf(LOG_DEBUG,"RCPT TO OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $this->state=self::DATA;
-	 $bev->write("DATA\r\n");
-	 debug::printf(LOG_INFO,"> DATA\n");
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::DATA:
-	 $retcode=$this->parse_response($bev,$ctx,354);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"DATA response error, code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 debug::printf(LOG_DEBUG,"DATA OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $this->state=self::QUIT;
-	 $bev->write($this->data);
-	 $bev->write("\r\n.\r\n");
-	 debug::printf(LOG_INFO,"> Data...\n");
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::QUIT:
-	 $retcode=$this->parse_response($bev,$ctx,250);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"DATA Sent response error, code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 $this->ev_close($bev,$ctx);
-	 break;
-	 debug::printf(LOG_DEBUG,"DATA Sent OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $bev->write("QUIT\r\n");
-	 debug::printf(LOG_INFO,"> QUIT\n");
-	 break;
-
-	 /////////////////////////////////////////////////////////////////////////////////
-         case self::CLOSE:
-	 $retcode=$this->parse_response($bev,$ctx,221);
-	 if ($retcode['return']===self::RESPONSE_CONT) continue;
-	 if ($retcode['return']===self::RESPONSE_KO)
-	 {
-	    $this->ev_close($bev,$ctx);
-            debug::printf(LOG_ERR,"QUIT response error, code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	    $this->returncode=$retcode;
-	    return;
-	 }
-	 debug::printf(LOG_DEBUG,"QUIT OK code: %s arguments: %s \n",$retcode['code'],$retcode['arguments'][0]);
-	 $this->state=self::CLOSE;
-	 $this->ev_close($bev,$ctx);
-	 break;
+	  $smtp_connection->server_responses=$arguments;
+	  $smtp_connection->server_code = FALSE;
+	  $this->ev_close($smtp_connection);
+	  $this->base->exit(NULL);
+	  debug::printf(LOG_ERR,"Connection Error - Exit\n");
+	  return;
       }
+      elseif ($events & (EventBufferEvent::TIMEOUT)) 
+      {
+	  $code=EventUtil::getLastSocketErrno();
+	  $arguments=array("Connection Timeout","SocketErrMsg:".EventUtil::getLastSocketError()."(".$code.")");
+
+	  $smtp_connection->server_responses=$arguments;
+	  $smtp_connection->server_error = $code;
+	  $smtp_connection->server_code = FALSE;
+	  $this->ev_close($smtp_connection);
+	  $this->base->exit(NULL);
+	  debug::printf(LOG_ERR,"Connection Timeout - Exit\n");
+	  return;
+      }
+      elseif ($events & (EventBufferEvent::EOF)) 
+      {
+	  /*
+	  $code=EventUtil::getLastSocketErrno();
+	  $arguments=array("Connection Close","SocketErrMsg:".EventUtil::getLastSocketError()."(".$code.")");
+
+	  $smtp_connection->server_responses=$arguments;
+	  $this->server_error = $code;
+	  $smtp_connection->server_code= FALSE;
+	  */
+	  //$this->ev_close($smtp_connection);
+	  //$smtp_connection->bev->free();
+	  //$this->base->exit(NULL);
+	  $smtp_connection->closed=true;
+	  debug::printf(LOG_ERR,"Connection Close\n");
+	  return;
+      }
+      debug::printf(LOG_ERR,"Unknown Event: %s!\n",$events);
   }
 
   ////////////////////////////////////////////////////////////////////////////
-  // parse response method
-  ////////////////////////////////////////////////////////////////////////////
-
-  private function parse_response($bev,$ctx,$valid)
+  // read response and exit loop
+  // store the last response code and argument in
+  // $smtp_connection->server_code
+  // $smtp_connection->server_responses[]
+  //
+  // TOTO: add maximum bytes/line response to protect from bad server
+  public function ev_readcb($bev, $smtp_connection) 
   {
     $input = $bev->getInput();
 
-    debug::printf(LOG_DEBUG,"====> Response Len: %s\n",$input->length);
+    debug::printf(LOG_DEBUG,"====> nb octet(s) in buffer : %s\n",$input->length);
     while(($line = $input->readLine(EventBuffer::EOL_CRLF))!==NULL)
     {
       debug::printf(LOG_DEBUG,"====> Response Read: %s\n",$line);
@@ -863,58 +722,102 @@ $statemachine= array(
       if (empty($line)) 
       {
 	  debug::printf(LOG_ERR,"Line Empty!\n");
-	  //$ctx->base->exit(NULL);
-          return array('return'=>self::RESPONSE_KO,'code'=>-1,'arguments'=>$this->arguments);
+	  $smtp_connection->server_responses[]="Empty line!!";
+	  $smtp_connection->server_code = -1;
+	  $this->base->exit(NULL);
+          return;
       }
 
-      /* Read the code and store the rest in the arguments array. */
-      $this->code = substr($line, 0, 3);
-      $this->arguments[] = trim(substr($line, 4));
-
-      /* Check the syntax of the response code. */
-      if (is_numeric($this->code)) 
+      /* Read the server_code and store the rest in the server_responses array. */
+      $code = substr($line, 0, 3);
+      if ($smtp_connection->server_code!=0&&$smtp_connection->server_code!=$code)
       {
-	  $this->_code = (int)$this->code;
+	  $smtp_connection->server_responses[]="Server respond with different code in the same response!!";
+	  $smtp_connection->server_code = -1;
+	  $this->base->exit(NULL);
+	  return;
+      }
+      $code = substr($line, 0, 3);
+      if ($smtp_connection->server_code!=0&&$smtp_connection->server_code!=$code)
+      {
+	  $smtp_connection->server_responses[]="Server Response with different response code!!";
+	  $smtp_connection->server_code = -1;
+	  $this->base->exit(NULL);
+	  return;
+      }
+      $smtp_connection->server_responses[] = trim(substr($line, 4));
+
+      /* Check the syntax of the response server_code. */
+      if (is_numeric($code)) 
+      {
+	  $smtp_connection->server_code = (int)$code;
       } 
       else 
       {
-	  $this->_code = -1;
-	  break;
+	  $smtp_connection->server_responses[]="Response code not numeric!!";
+	  $smtp_connection->server_code = -1;
+	  $this->base->exit(NULL);
+	  return;
       }
 
-      debug::printf(LOG_INFO,"< %s\n",$line);
+      debug::printf(LOG_INFO,"SMTP < %s\n",$line);
 
       /* If this is not a multiline response, we're done. */
       $eor=substr($line, 3, 1);
-      if ($eor===" ") break;
+      if ($eor===" ") 
+      {
+	$this->base->exit(NULL);
+	return;
+      }
     } 
+  }
 
-    if ($line===null) 
-       return array('return'=>self::RESPONSE_CONT, 'code'=>$this->code,'arguments'=>$this->arguments);
+  ////////////////////////////////////////////////////////////////////////////
+  // ev_write write a message to the current buffer event and trace the message
+  ////////////////////////////////////////////////////////////////////////////
 
+  private function ev_write($smtp_connection,$string,$message=null)
+  {
+     $ret=$smtp_connection->bev->write($string);
+     if ($ret!=true)
+     {
+       $smtp_connection->server_code=-1;
+       $smtp_connection->server_responses[]="write error! socket already close ?";
+       debug::printf(LOG_ERR,"Write Error! socket already close ?\n");
+     }
+     else
+     {
+       if ($message===null)
+       debug::printf(LOG_INFO,"SMTP > %s\n",trim($string));
+       else
+       debug::printf(LOG_INFO,"SMTP > %s\n",trim($message));
+     }
+     return $ret;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // valid response $code with $valid code(s)
+  // $valid can be an array or one value
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_IsValidResponse($smtp_connection,$code,$valid)
+  {
     /* Compare the server's response code with the valid code/codes. */
-    if (is_int($valid) && ($this->_code === $valid)) {
-	$ret=array('return'=>self::RESPONSE_OK, 'code'=>$this->code,'arguments'=>$this->arguments);
-	$this->arguments = array();
-	$this->code = 0;
-	return $ret;
-    } elseif (is_array($valid) && in_array($this->_code, $valid, true)) {
-	$ret=array('return'=>self::RESPONSE_OK, 'code'=>$this->code,'arguments'=>$this->arguments);
-	$this->arguments = array();
-	$this->code = 0;
-	return $ret;
+    if (is_int($valid) && ($code === $valid)) {
+	return true;
+    } elseif (is_array($valid) && in_array($code, $valid, true)) {
+	return true;
     }
-    $ret=array('return'=>self::RESPONSE_KO, 'code'=>$this->code,'arguments'=>$this->arguments);
-    $this->arguments = array();
-    $this->code = 0;
-    return $ret;
+    $smtp_connection->server_code=-1;
+    $smtp_connection->server_responses[]="Not Valid Response for this SMTP CMD!";
+    return false;
   }
 
   ////////////////////////////////////////////////////////////////////////////
   // parse xmcd (xclient/xforward) args
   ////////////////////////////////////////////////////////////////////////////
 
-  private function xcmdheloargs_check($xcmdheloargs,$autorized_attr)
+  private function _SMTP_XCMDHeloArgs_Check($xcmdheloargs,$autorized_attr)
   {
      if (preg_match_all("/\w+/",$xcmdheloargs,$arr)>=1)
      {
@@ -929,73 +832,422 @@ $statemachine= array(
      }
      return false;
   }
+
   ////////////////////////////////////////////////////////////////////////////
-  // error/timeout/eof/connect event callback
+  // reinit server response flag and dispatch to read server response
   ////////////////////////////////////////////////////////////////////////////
 
-  public function eventcb($bev, $events, $ctx) 
+  private function _SMTP_ReadResponses($smtp_connection)
   {
-      if ($events & EventBufferEvent::CONNECTED) 
-      {
-	  debug::printf(LOG_INFO,"Connected.\n");
-          if ($ctx->tls_activated===true)
-	  {
-	    debug::printf(LOG_INFO,"Now in TLS...\n");
-	    $bev_key=$this->server_host.":".$this->server_port;
-	    if (isset($this->bev_cache[$bev_key]))
-	    {
-	       debug::printf(LOG_INFO,"Replace in cache the TLS BufferEvent...\n");
-	       $this->bev_cache[$bev_key]['bev']=$this->bev;
-	    }
-	    debug::printf(LOG_NOTICE, "Cipher           : %s\n",implode("/",preg_split("/\s+/",trim($bev->sslGetCipherInfo()))));
-	    debug::printf(LOG_NOTICE, "CipherVersion    : %s\n",$bev->sslGetCipherVersion());
-	    debug::printf(LOG_NOTICE, "CipherName       : %s\n",$bev->sslGetCipherName());
-	    debug::printf(LOG_NOTICE, "CipherProtocol   : %s\n",$bev->sslGetProtocol());
-	    // send secondes EHLO after TLS handcheck are ok
-	    $this->state=self::HELO;
-	    $this->bev->write("EHLO ".$this->helohost."\r\n");
-	    debug::printf(LOG_DEBUG,"SEND in TLS: EHLO %s\n",$this->helohost);
-	  }
-	  return;
-      } 
-      elseif ($events & (EventBufferEvent::ERROR))
-      {
-	  $dnserror=$ctx->bev->getDnsErrorString();
-	  $sslerror=$ctx->bev->sslError();
-	  $sockcode=EventUtil::getLastSocketErrno();
-	  $sockError=EventUtil::getLastSocketError();
-	  $arguments=array();
-	  if ($sockError!=0) $arguments[]=$sockError.'('.$sockcode.')';
-	  if ($sslerror!==false) $arguments[]=$sslerror;
-	  if ($dnserror!="") $arguments[]=$dnserror;
+      // init the response property
+      $smtp_connection->server_responses=array();
+      $smtp_connection->server_code=0;
 
-	  debug::printf(LOG_ERR,"Erreur msg:<%s>\n",implode(',',$arguments));
-	  $this->returncode=array('return'=>false, 'code'=>-1,'arguments'=>$arguments);
-	  $this->ev_close($bev,$ctx);
-	  debug::printf(LOG_ERR,"Connection Error - Exit\n");
-	  return;
-      }
-      elseif ($events & (EventBufferEvent::TIMEOUT)) 
-      {
-	  $code=EventUtil::getLastSocketErrno();
-	  $arguments=array("Connection Timeout","SocketErrMsg:".EventUtil::getLastSocketError()."(".$code.")");
-	  $this->returncode=array('return'=>false, 'code'=>-1,'arguments'=>$arguments);
-	  $this->ev_close($bev,$ctx);
-	  debug::printf(LOG_ERR,"Connection Timeout - Exit\n");
-	  return;
-      }
-      elseif ($events & (EventBufferEvent::EOF)) 
-      {
-	  $code=EventUtil::getLastSocketErrno();
-	  $arguments=array("Connection Close","SocketErrMsg:".EventUtil::getLastSocketError()."(".$code.")");
-	  $this->returncode=array('return'=>false, 'code'=>-1,'arguments'=>$arguments);
-	  $this->ev_close($bev,$ctx);
-	  debug::printf(LOG_ERR,"Connection Close - Exit\n");
-	  return;
-      }
-      debug::printf(LOG_ERR,"Unknown Event: %s!\n",$events);
+      // dispatch to receved conection helo 
+      $this->base->dispatch();
+
+      debug::print_r(LOG_DEBUG,$smtp_connection->server_responses);
+      debug::printf(LOG_DEBUG,"Server Response code:%s\n",$smtp_connection->server_code);
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // Send complete message transaction ehlo/starttls/mailfrom/rcpt to/data/quit
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_SendMessage($smtp_connection,$mailfrom,$recipient,&$data)
+  {
+    // read server helo, send ehlo/helo, send starttls if necessary
+    if ($this->_SMTP_ConnectionHandCheck($smtp_connection)!=true)
+    {
+      return false;
+    }
+
+    // message transaction
+    if ($this->_SMTP_MessageTransaction($smtp_connection,$mailfrom,$recipient,$data)!==true)
+    {
+      return false;
+    }
+
+    // quit server
+    if ($this->_SMTP_QUIT($smtp_connection)!==true)
+    {
+      return false;
+    }
+
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send Connection handcheck (connection helo/client ehlo/starttls)
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_ConnectionHandCheck($smtp_connection)
+  {
+    debug::printf(LOG_INFO,"Do SMTP handcheck with <%s> host...\n",$smtp_connection->server_host);
+    if ($smtp_connection->handcheck===true)
+    {
+       debug::printf(LOG_ERR,"SMTP Handcheck already done !\n");
+       return true;
+    }
+
+    // banner helo
+    if ($this->_SMTP_ConnectionHello($smtp_connection)!==true)
+    {
+      $this->ev_close($smtp_connection);
+      return false;
+    }
+
+    // init tls state
+    $smtp_connection->tls_activated=false;
+    // closed state
+    $smtp_connection->closed=false;
+
+    // ehlo/helo/starttls
+    do
+    {
+      $helo_code=$this->_SMTP_Hello($smtp_connection);
+      if      ($helo_code===self::CLOSE)
+      {
+	$this->ev_close($smtp_connection);
+	return false;
+      }
+      else if ($helo_code===self::QUIT)
+      {
+	$this->_SMTP_QUIT($smtp_connection);
+	return false;
+      }
+      else if ($helo_code===self::STARTTLS)
+      {
+	if ($this->_SMTP_STARTTLS($smtp_connection)!==true) return false;
+        $sendehloaftertls=true;
+      }
+      else
+        $sendehloaftertls=false;
+    } while($sendehloaftertls==true);
+
+    $smtp_connection->handcheck=true;
+    debug::printf(LOG_INFO,"SMTP handcheck done...\n");
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send Repeatable Message Transaction
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_MessageTransaction($smtp_connection,$mailfrom,$recipient,&$data)
+  {
+    if ($this->_SMTP_MAILFROM($smtp_connection,$mailfrom)!==true)
+    {
+      return false;
+    }
+    if ($this->_SMTP_RCPT($smtp_connection,$recipient)!==true)
+    {
+      return false;
+    }
+    if ($this->_SMTP_DATA($smtp_connection)!==true)
+    {
+      return false;
+    }
+    if ($this->_SMTP_DATASend($smtp_connection,$data)!==true)
+    {
+      return false;
+    }
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // read the connection server hello
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_ConnectionHello($smtp_connection)
+  {
+      $this->_SMTP_ReadResponses($smtp_connection);
+      if ($this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,220)!==true)
+      {
+        debug::printf(LOG_ERR,"Connect response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+	return false;
+      }
+
+       $smtp_connection->server_estmp=false;
+      // check if are ESMTP server
+      if (preg_match("/ESMTP/i",$smtp_connection->server_responses[0])==1) 
+      {
+	debug::printf(LOG_INFO,"ESMTP Server detected...\n");
+	$smtp_connection->server_estmp=true;
+      }
+
+      debug::printf(LOG_DEBUG,"Connect OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+      return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send EHLO/HELO and read/analyse the response
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_Hello($smtp_connection,$forceehlo=false)
+  {
+    // send by default EHLO if forceehlo is set to true or if the server as the ESMTP support
+    if ($this->forceehlo===true||$smtp_connection->estmp===true&&$forceehlo===true)
+    {
+      $retcode=$this->ev_write($smtp_connection,"EHLO ".$this->helohost."\r\n");
+    }
+    // Send HELO
+    else
+    {
+      $retcode=$this->ev_write($smtp_connection,"HELO ".$this->helohost."\r\n");
+    }
+
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,250)!==true)
+    {
+       debug::printf(LOG_ERR,"EHLO <%s>, response error, code: %s arguments: %s \n",$this->helohost,$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return self::CLOSE;
+    }
+    debug::printf(LOG_DEBUG,"EHLO OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+
+    //debug::print_r(LOG_DEBUG,$retcode);
+    // parse extension reponse
+    $smtp_connection->server_maxsize=0;
+    $smtp_connection->server_tls=false;
+    $smtp_connection->server_8bitmime=false;
+    $smtp_connection->server_xclient=array();
+    $smtp_connection->server_xforward=array();
+
+    foreach($smtp_connection->server_responses as $value)
+    {
+      //debug::printf(LOG_DEBUG,"Check response arguments: %s \n",$value);
+
+      // http://www.postfix.org/XFORWARD_README.html
+      if (preg_match('/^XFORWARD\s(.+)/i', $value, $arr)==1)
+      {
+	debug::printf(LOG_INFO,"The Server annonce XFORWARD support\n");
+	$xforward_ret=$this->_SMTP_XCMDHeloArgs_Check($arr[1],self::$xforward_name);
+	if (isset($xforward_ret[1]))
+	foreach($xforward_ret[1] as $args)
+	   debug::printf(LOG_INFO,"The Server annonce XFORWARD unknown attribut:%s, go to ignore it\n",$args);
+	$smtp_connection->server_xforward=$xforward_ret;
+	debug::print_r(LOG_DEBUG,$xforward_ret);
+	continue;
+      }
+
+      // http://www.postfix.org/XCLIENT_README.html
+      if (preg_match('/^XCLIENT\s(.+)/i', $value, $arr)==1)
+      {
+	debug::printf(LOG_INFO,"The Server annonce XCLIENT support\n");
+	$xclient_ret=$this->_SMTP_XCMDHeloArgs_Check($arr[1],self::$xclient_name);
+	if (isset($xclient_ret[1]))
+	foreach($xclient_ret[1] as $args)
+	   debug::printf(LOG_INFO,"The Server annonce XCLIENT unknown attribut:%s, go to ignore it\n",$args);
+	$smtp_connection->server_xclient=$xclient_ret;
+	debug::print_r(LOG_DEBUG,$xclient_ret);
+	continue;
+      }
+
+      // 8BITMIME support
+      // http://cr.yp.to/smtp/8bitmime.html
+      if (preg_match('/^8BITMIME/i', $value)==1)
+      {
+	debug::printf(LOG_INFO,"The Server annonce 8bit Mime support\n");
+	$smtp_connection->server_8bitmime=true;
+	continue;
+      }
+
+      // match startls support
+      // http://en.wikipedia.org/wiki/STARTTLS
+      // https://tools.ietf.org/html/rfc3207
+      if (preg_match('/^STARTTLS/i', $value)==1)
+      {
+	if ($smtp_connection->tls_activated===true)
+	{
+	  debug::printf(LOG_INFO,"The Server annonce STARTTLS support in TLS connection, is not conforme to rfc3207!\n");
+	  return self::QUIT;
+	}
+
+	debug::printf(LOG_INFO,"The Server annonce STARTTLS support\n");
+	$smtp_connection->server_tls=true;
+	continue;
+      }
+
+      // match size support
+      // http://cr.yp.to/smtp/size.html
+      if (preg_match('/^SIZE ([0-9]*)/i', $value, $sizes)==1)
+      {
+	$smtp_connection->server_maxsize=$sizes[1];
+	debug::printf(LOG_INFO,"The Server annonce Message Max Size of %s\n",$smtp_connection->server_maxsize);
+	continue;
+      }
+    }
+
+    // check message size with server size receved
+    if ($smtp_connection->server_maxsize>0&&$this->datalen>$smtp_connection->server_maxsize)
+    {
+      debug::printf(LOG_ERR,"Message Size %s is grether than max message size %s - abort!\n",$this->datalen,$smtp_connection->server_maxsize);
+      return self::QUIT;
+    }
+    debug::print_r(LOG_DEBUG,$smtp_connection->server_responses);
+
+    // check STARTTLS Support and start tls session if the client is configured to use tls
+    if ($this->tls===true&&$smtp_connection->server_tls===true&&$smtp_connection->tls_activated!==true)
+    {
+      debug::printf(LOG_NOTICE,"Try to Start STARTTLS handcheck...\n");
+      return self::STARTTLS;
+    }
+
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send STARTTLS cmd and upgrade the socket connection to TLS (after STARTTLS)
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_STARTTLS($smtp_connection)
+  {	
+    $retcode=$this->ev_write($smtp_connection,"STARTTLS\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,220)!==true)
+    {
+       debug::printf(LOG_ERR,"STARTTLS <%s>, response error, code: %s arguments: %s \n",$this->helohost,$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return self::CLOSE;
+    }
+    debug::printf(LOG_DEBUG,"STARTTLS OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+
+    debug::printf(LOG_INFO,"Entering in TLS Hand check...\n");
+    $ev_options= EventBufferEvent::SSL_CONNECTING | EventBufferEvent::SSL_OPEN;
+    $bev = EventBufferEvent::sslSocket($this->base, $smtp_connection->bev->fd, $this->sslctx, $ev_options);
+    if (!$bev) 
+    {
+      $smtp_connection->server_responses=array();
+      $smtp_connection->server_code=0;
+      $sslerror=$bev->sslError();
+      debug::printf(LOG_ERR,"Fail when creating socket bufferevent in ssl: %s\n",$sslerror);
+      $smtp_connection->bev->close();
+      $smtp_connection->bev->free();
+      $bev->free();
+      return false;
+    }
+    $smtp_connection->bev->free();
+    $smtp_connection->bev=$bev;
+    $smtp_connection->bev->setCallbacks(array($this,"ev_readcb"), /* writecb */ NULL, array($this,"ev_eventcb"), $smtp_connection);
+    $smtp_connection->bev->enable(Event::READ | Event::WRITE);
+    $smtp_connection->bev->setTimeouts($this->readtimeout,$this->writetimeout);
+    $smtp_connection->tls_activated=true;
+    $this->base->dispatch(); // to handle the connect event
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send Mail from
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_MAILFROM($smtp_connection,$mailfrom)
+  {	
+    $retcode=$this->ev_write($smtp_connection,"MAIL FROM:<".$mailfrom.">\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,250)!==true)
+    {
+       $this->ev_close($smtp_connection);
+       debug::printf(LOG_ERR,"MAIL FROM <%s>, response error, code: %s arguments: %s \n",$mailfrom,$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return false;
+    }
+    debug::printf(LOG_DEBUG,"MAIL FROM OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send Reciepient To
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_RCPT($smtp_connection,$recipient)
+  {	
+    $retcode=$this->ev_write($smtp_connection,"RCPT TO:<".$recipient.">\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,array(250,251))!==true)
+    {
+       $this->ev_close($smtp_connection);
+       debug::printf(LOG_ERR,"RCPT TO <%s>, response error, code: %s arguments: %s \n",$recipient,$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return false;
+    }
+    if ($smtp_connection->server_code===251)
+      debug::printf(LOG_NOTICE,"RCPT TO OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    else
+      debug::printf(LOG_DEBUG,"RCPT TO OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send DATA cmd
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_DATA($smtp_connection)
+  {	
+    $retcode=$this->ev_write($smtp_connection,"DATA\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,354)!==true)
+    {
+       $this->ev_close($smtp_connection);
+       debug::printf(LOG_ERR,"DATA response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return false;
+    }
+    debug::printf(LOG_DEBUG,"DATA OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send the data
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_DATASend($smtp_connection,&$data)
+  {
+    $retcode=$this->ev_write($smtp_connection,$data,"Data Sending");
+    if ($retcode===true) $retcode=$this->ev_write($smtp_connection,"\r\n.\r\n","Data <CRLF>.<CRLF> sending");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,250)!==true)
+    {
+       $this->ev_close($smtp_connection);
+       debug::printf(LOG_ERR,"DATA Sent response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       return false;
+    }
+    debug::printf(LOG_DEBUG,"DATA Sent OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send QUIT cmd and close the connection
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_QUIT($smtp_connection)
+  {
+    $retcode=$this->ev_write($smtp_connection,"QUIT\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,221)!==true)
+    {
+       debug::printf(LOG_ERR,"QUIT response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       $this->ev_close($smtp_connection);
+       return false;
+    }
+    debug::printf(LOG_DEBUG,"QUIT OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    if (isset($smtp_connection->bev)) $this->ev_close($smtp_connection);
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send RSET cmd 
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_RSET($smtp_connection)
+  {
+
+    $retcode=$this->ev_write($smtp_connection,"RSET\r\n");
+    $this->_SMTP_ReadResponses($smtp_connection);
+    if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,250)!==true)
+    {
+       debug::printf(LOG_ERR,"RSET response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+       $this->ev_close($smtp_connection);
+       return false;
+    }
+    debug::printf(LOG_DEBUG,"RSET OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+    $this->ev_close($smtp_connection);
+    return true;
+  }
 }
 
 

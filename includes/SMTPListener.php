@@ -23,9 +23,16 @@ class SMTPListener
   public $options = [];
   public $base = null;
   public $events = [];
-  private $readtimeout = 300;
-  private $writetimeout = 300;
   private $socket = null;
+
+  // socket read/write default timeout
+  public $readtimeout = 300;
+  public $writetimeout = 300;
+
+  // socket so_keepalive default timming 
+  public $tcp_keepidle = 7200;
+  public $tcp_keepintvl = 75;
+  public $tcp_keepcnt = 9;
 
   public function __construct($base,$target,$options=null) 
   {
@@ -157,6 +164,9 @@ class SMTPListener
     // create the socket
     $socket = socket_create($sockip['type'], SOCK_STREAM, SOL_TCP);
 
+    // set the Socket Address Reuse option
+    socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
+
     // set the socket timeout
     $timeout = array('sec'=>$this->readtimeout,'usec'=>0);
     socket_set_option($socket,SOL_SOCKET,SO_RCVTIMEO,$timeout);
@@ -166,12 +176,12 @@ class SMTPListener
     // set keepalive tcp option
     socket_set_option($socket,SOL_SOCKET,SO_KEEPALIVE,1);
 
-    // if on linux try to change KeepAlive counter
+    // if on linux try to change KeepAlive timing counter
     if (!strncmp("Linux",PHP_OS,5))
     {
-      socket_set_option($socket,SOL_TCP   ,NetTool::TCP_KEEPIDLE,7200);
-      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPINTVL,75);
-      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPCNT,9);
+      socket_set_option($socket,SOL_TCP   ,NetTool::TCP_KEEPIDLE,$this->tcp_keepidle);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPINTVL,$this->tcp_keepintvl);
+      socket_set_option($socket,SOL_SOCKET,NetTool::TCP_KEEPCNT,$this->tcp_keepcnt);
     }
 
     // bind the socket

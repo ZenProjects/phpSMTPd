@@ -722,14 +722,13 @@ class SMTPProtocol
 
 	      // upgrade the connexion to TLS
 	      $ctx->cnx->disable(Event::READ | Event::WRITE);
-	      $cnx = EventBufferEvent::sslFilter($ctx->base,
-		  $ctx->cnx, $ctx->sslctx,
-		  EventBufferEvent::SSL_ACCEPTING|EventBufferEvent::SSL_OPEN);
+	      $ev_options= EventBufferEvent::SSL_ACCEPTING|EventBufferEvent::SSL_OPEN;
+              // $ev_options |= EventBufferEvent::OPT_CLOSE_ON_FREE;
+	      $cnx = EventBufferEvent::sslFilter($ctx->base, $ctx->cnx, $ctx->sslctx,$ev_options);
 	      if (!$cnx)
 	      {
 		  $ctx->cnx->free();
 		  $cnx->free();
-		  //$ctx->base->exit(NULL);
 		  $ctx->ev_close($ctx);
 		  debug::exit_with_error(63,"Couldn't create ssl bufferevent\n");
 		  break;
@@ -740,6 +739,7 @@ class SMTPProtocol
 	      $ctx->cnx->setTimeouts($ctx->read_timeout,$ctx->write_timeout);
 	      $ctx->cnx->setCallbacks([$ctx, "ev_read"], NULL, [$ctx, 'ev_error'], $ctx);
 	      $ctx->cnx->enable(Event::READ);
+	      if(gc_enabled()) gc_collect_cycles();
 
 	      // reset of the connection
 	      // go to state HELO
