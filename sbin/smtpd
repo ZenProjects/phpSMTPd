@@ -5,7 +5,7 @@ namespace SuperListd;
 // setup base dire
 require_once(__DIR__."/../includes/Setup.php");
 
-// set the default debug log level 
+// set the default startup debug log level 
 Debug::$loglevel=LOG_WARNING;
 
 // load SMTPDaemon

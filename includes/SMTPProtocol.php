@@ -663,17 +663,26 @@ class SMTPProtocol
 		break;
 	      }
 	      $xforward=substr($line,9);
-              $xforward_attrsret=$this->xcmdheloargs_check($xforward,self::$xforward_name);
+              $xforward_attrsret=$this->xcmdargs_check($xforward,self::$xforward_name);
 	      if (is_array($xforward_attrsret))
 	      {
-		$ctx->enveloppe['xforward']=array_merge($ctx->enveloppe['xforward'],$xforward_attrs);
+		if (isset($ctx->enveloppe['xforward']))
+		  $ctx->enveloppe['xforward']=array_merge($ctx->enveloppe['xforward'],$xforward_attrs);
 		debug::printf(LOG_NOTICE,"XFORWARD Attributs <%s> are valid!\n",$xforward);
 		$this->ev_write($ctx, "250 XFORWARD attribut are ok\r\n");
 	      }
 	      else
 	      {
-		debug::printf(LOG_NOTICE,"XFORWARD Error on <%s>, <%s> attribut not conform\n",$xforward,$xforward_attrsret);
-		$this->ev_write($ctx, "501 XFORWARD Error, <".$xforward_attrsret."> attribut not conform!\r\n");
+		if ($xforward_attrsret!==false)
+		{
+		  debug::printf(LOG_NOTICE,"XFORWARD Error on <%s>, <%s> attribut not conform\n",$xforward,$xforward_attrsret);
+		  $this->ev_write($ctx, "501 XFORWARD Error, <".$xforward_attrsret."> attribut not conform!\r\n");
+		}
+		else
+		{
+		  debug::printf(LOG_NOTICE,"XFORWARD Error on <%s>, syntax error!\n",$xforward);
+		  $this->ev_write($ctx, "501 XFORWARD Syntax Error !\r\n");
+		}
 	      }
 	      break;
 
@@ -698,7 +707,7 @@ class SMTPProtocol
 		break;
 	      }
 	      $xclient=substr($line,8);
-              $xclient_attrsret=$this->xcmdheloargs_check($xclient,self::$xclient_name);
+              $xclient_attrsret=$this->xcmdargs_check($xclient,self::$xclient_name);
 	      if (is_array($xclient_attrsret))
 	      {
 		$ctx->enveloppe['xclient']=$xclient_attrsret;
@@ -794,17 +803,22 @@ class SMTPProtocol
   {
      if (preg_match_all("/(\w+)=(\w+)/",$xcmdargs,$arr)>=1)
      {
+	debug::print_r(LOG_DEBUG,$arr);
 	$attrs=array();
 	foreach($arr[1] as $key => $args)
 	{
 	   $xattr=strtoupper($args);
+	   debug::printf(LOG_DEBUG,"Check for attr:<%s>\n",$xattr);
+	   if ($xattr=="")
+	      return false;
 	   if (!in_array($xattr,$autorized_attr))
 	     return $xattr;
-	   $attrs[$xattr]=nettool::decode_xtext($arr[2][$key]);
+	   $attrs[$xattr]=NetTool::decode_xtext($arr[2][$key]);
 	}
+	debug::print_r(LOG_DEBUG,$attrs);
 	return $attrs;
      }
-     return $xcmdargs;
+     return false;
   }
 
 }

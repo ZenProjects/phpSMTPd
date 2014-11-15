@@ -39,6 +39,7 @@ class SMTPConnection
   public $closed = false;
   public $cached = false;
   public $handcheck = false;
+  public $xclient_sent = false;
 
   // connection server information
   public $server_host=null;
@@ -65,6 +66,10 @@ class SMTPConnection
     $this->server_ip=$host;
     $this->server_port=$port;
     $this->cached=false;
+    $this->xclient_sent=false;
+    $this->handcheck=false;
+    $this->closed=false;
+    $this->tls_activated=false;
   }
 }
 
@@ -110,11 +115,13 @@ class SMTPClient
   private $smtp_connection_cache = array();
 
   // message informations
-  private $helohost = null;  // hostname send by EHLO/HELO
-  private $mailfrom = null;  // mail from adresse
-  private $rcpt = array();   // recipient list to send the massage
-  private $data = null;      // the message data
-  private $datalen = null;   // the message data len
+  private $helohost = null;    // hostname send by EHLO/HELO
+  private $mailfrom = null;    // mail from adresse
+  private $rcpt = array();     // recipient list to send the massage
+  private $data = null;        // the message data
+  private $datalen = null;     // the message data len
+  private $xforward = array(); // XFORWARD options to send to the server
+  private $xclient = array();  // XCLIENT options to send to the server
 
   ////////////////////////////////////////////////////////////////////////////
   // Constructor
@@ -496,6 +503,43 @@ class SMTPClient
   }
  
   ////////////////////////////////////////////////////////////////////////////
+  // set XClient
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function setXClient($xclients)
+  {
+    debug::printf(LOG_DEBUG,"Set XCLIENT: %s\n",implode(",",$xclients));
+    foreach($xclients as $key => $value)
+    {
+      if (!in_array($key,self::$xclient_name))
+      {
+	debug::printf(LOG_INFO,"The Server annonce XCLIENT unknown attribut:%s, go to ignore it\n",$key);
+      }
+      else
+        $this->xclient[$key]=$value;
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // set XForward
+  ////////////////////////////////////////////////////////////////////////////
+
+  public function setXForward($xforwards)
+  {
+    debug::printf(LOG_DEBUG,"Set XFORWARD: %s\n",print_r($xforwards,true));
+    foreach($xforwards as $key => $value)
+    {
+      if (!in_array($key,self::$xforward_name))
+      {
+	debug::printf(LOG_INFO,"The Server annonce XFORWARD unknown attribut:%s, go to ignore it\n",$key);
+      }
+      else
+        $this->xforward[$key]=$value;
+    }
+    debug::printf(LOG_DEBUG,"XFORWARD accepted: %s\n",print_r($this->xforward,true));
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
   // set HeloHost
   ////////////////////////////////////////////////////////////////////////////
 
@@ -717,7 +761,7 @@ class SMTPClient
     debug::printf(LOG_DEBUG,"====> nb octet(s) in buffer : %s\n",$input->length);
     while(($line = $input->readLine(EventBuffer::EOL_CRLF))!==NULL)
     {
-      debug::printf(LOG_DEBUG,"====> Response Read: %s\n",$line);
+      debug::printf(LOG_DEBUG,"====> Response Read: %s\n",NetTool::toprintable($line));
       /* If we receive an empty line, the connection was closed. */
       if (empty($line)) 
       {
@@ -760,7 +804,7 @@ class SMTPClient
 	  return;
       }
 
-      debug::printf(LOG_INFO,"SMTP < %s\n",$line);
+      debug::printf(LOG_INFO,"SMTP < %s\n",NetTool::toprintable($line));
 
       /* If this is not a multiline response, we're done. */
       $eor=substr($line, 3, 1);
@@ -788,9 +832,9 @@ class SMTPClient
      else
      {
        if ($message===null)
-       debug::printf(LOG_INFO,"SMTP > %s\n",trim($string));
+       debug::printf(LOG_INFO,"SMTP > %s\n",NetTool::toprintable($string));
        else
-       debug::printf(LOG_INFO,"SMTP > %s\n",trim($message));
+       debug::printf(LOG_INFO,"SMTP > %s\n",NetTool::toprintable($message));
      }
      return $ret;
   }
@@ -921,8 +965,20 @@ class SMTPClient
         $sendehloaftertls=true;
       }
       else
-        $sendehloaftertls=false;
+      {
+	if ($smtp_connection->xclient_sent===false)
+	{
+	  $retxclient=$this->_SMTP_XCLIENT($smtp_connection,$this->xclient);
+	  if      ($retxclient===false)      return false;
+	  else if ($retxclient===self::HELO) $sendehloaftertls=true;
+	}
+	else
+	$sendehloaftertls=false;
+      }
     } while($sendehloaftertls==true);
+
+
+    if ($this->_SMTP_XFORWARD($smtp_connection)!==true) return false;
 
     $smtp_connection->handcheck=true;
     debug::printf(LOG_INFO,"SMTP handcheck done...\n");
@@ -1227,6 +1283,93 @@ class SMTPClient
     debug::printf(LOG_DEBUG,"QUIT OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
     if (isset($smtp_connection->bev)) $this->ev_close($smtp_connection);
     return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send XCLIENT cmd 
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_XCLIENT($smtp_connection)
+  {
+    if (count($smtp_connection->server_xclient[0])>0)
+    {
+      $args="";
+      foreach($this->xclient as $key =>$value)
+      {
+	debug::printf(LOG_DEBUG,"xclient value[%s]='%s'\n",$key,$value);
+	if (strlen($args)+strlen($key)+strlen($value)+1<512)
+	{
+	   $args.=sprintf(" %s=%s",$key,$value);
+	   debug::printf(LOG_DEBUG,"xclient args='%s'\n",$args);
+	}
+	else
+	{
+	   $smtp_connection->server_code=-1;
+	   $smtp_connection->server_responses[]="xclient options line size to long!";
+	   debug::printf(LOG_DEBUG,"xclient options line size to long!\n");
+	   return false;
+	}
+      }
+      if ($args!="")
+      {
+	 debug::printf(LOG_DEBUG,"xclient args='%s'\n",$args);
+	 $retcode=$this->ev_write($smtp_connection,"XCLIENT".$args."\r\n");
+	 $this->_SMTP_ReadResponses($smtp_connection);
+	 if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,220)!==true)
+	 {
+	    debug::printf(LOG_ERR,"XCLIENT response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+	    return false;
+	 }
+	 debug::printf(LOG_DEBUG,"XCLIENT OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+	 $smtp_connection->xclient_sent=true;
+	 return self::HELO;
+      }
+    }
+    return true;
+  }
+
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Send XFORWARD cmd 
+  ////////////////////////////////////////////////////////////////////////////
+
+  private function _SMTP_XFORWARD($smtp_connection)
+  {
+    if (count($smtp_connection->server_xforward[0])>0)
+    {
+      $args="";
+      foreach($this->xforward as $key =>$value)
+      {
+	debug::printf(LOG_DEBUG,"xforward value[%s]='%s'\n",$key,$value);
+	if (strlen($args)+strlen($key)+strlen($value)+1<512)
+	{
+	   $args.=sprintf(" %s=%s",$key,$value);
+	   debug::printf(LOG_DEBUG,"xforward args='%s'\n",$args);
+	}
+	else
+	{
+          if ($this->__SMTP_XFORWARD($smtp_connection,$args)!=true) return false;
+	  $args=sprintf(" %s=%s",$key,$value);
+	}
+      }
+      if ($args!="")
+        if ($this->__SMTP_XFORWARD($smtp_connection,$args)!=true) return false;
+    }
+    return true;
+  }
+
+  private function __SMTP_XFORWARD($smtp_connection,$args)
+  {
+     debug::printf(LOG_DEBUG,"xforward args='%s'\n",$args);
+     $retcode=$this->ev_write($smtp_connection,"XFORWARD".$args."\r\n");
+     $this->_SMTP_ReadResponses($smtp_connection);
+     if ($retcode!==true||$this->_SMTP_IsValidResponse($smtp_connection,$smtp_connection->server_code,250)!==true)
+     {
+	debug::printf(LOG_ERR,"XFORWARD response error, code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+	return false;
+     }
+     debug::printf(LOG_DEBUG,"XFORWARD OK code: %s arguments: %s \n",$smtp_connection->server_code,$smtp_connection->server_responses[0]);
+     return true;
   }
 
   ////////////////////////////////////////////////////////////////////////////
