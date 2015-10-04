@@ -49,12 +49,19 @@ The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementati
 PHP V5.5 minimum
 
 PHP Extension:
+
 - PECL-Event >=1.11.0 (get last version from pecl-event git : https://bitbucket.org/osmanov/pecl-event/overview)
+
 - openssl
+
 - PCNTL
+
 - sysvsem
+
 - sysvshm
+
 - PCRE
+
 - POSIX
 
 ## starting the daemon
@@ -407,4 +414,3 @@ Nov  8 02:01:36 hotpoint SuperListd[70054]: Worker #3 with pid:70054 started at 
 - CHUNKING, **not done, not planned**
 
   http://tools.ietf.org/html/rfc3030
-
