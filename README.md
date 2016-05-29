@@ -64,11 +64,11 @@ PHP Extension:
 
 Clone the git to repertoire to install:
 ```
-$ git clone https://github.com/mcarbonneaux/SuperListd.git
+$ git clone https://github.com/mcarbonneaux/phpsmtpd.git
 ```
 
 ```
-$ cd SuperListd
+$ cd phpsmtpd
 $ cp config/php-smtpd.ini.sample to config/php-smtpd.ini
 ```
 
@@ -77,7 +77,7 @@ edit config/php-smtpd.ini and change the different parametter needed.
 create user for the daemon and change user parametter acordingly.
 
 ```
-user = superlistd
+user = phpsmtpd
 ```
 
 create /path/to/queue/basedir
@@ -124,11 +124,11 @@ $ sbin/smtpd --listen --daemon
 to see if has started:
 ```
 $ ps -ef | grep Super
-root      70045  23858  0 02:01 pts/1    00:00:00 SuperListdaemon
-root      70051  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #0
-root      70052  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #1
-root      70053  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #2
-root      70054  70045  0 02:01 pts/1    00:00:00 SuperListdaemon-Worker #3
+root      70045  23858  0 02:01 pts/1    00:00:00 phpSMTPdaemon
+root      70051  70045  0 02:01 pts/1    00:00:00 phpSMTPdaemon-Worker #0
+root      70052  70045  0 02:01 pts/1    00:00:00 phpSMTPdaemon-Worker #1
+root      70053  70045  0 02:01 pts/1    00:00:00 phpSMTPdaemon-Worker #2
+root      70054  70045  0 02:01 pts/1    00:00:00 phpSMTPdaemon-Worker #3
 root      70064  32148  0 02:01 pts/3    00:00:00 grep Super
 
 ```
