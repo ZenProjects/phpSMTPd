@@ -64,7 +64,7 @@ PHP Extension:
 
 Clone the git to repertoire to install:
 ```
-$ git clone https://github.com/mcarbonneaux/phpsmtpd.git
+$ git clone https://github.com/ZenProjects/phpsmtpd.git
 ```
 
 ```
