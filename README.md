@@ -8,7 +8,7 @@ They start as standalone Multiprocess pre-forked server daemon, with a watchdog 
 
 They start as root (or not) and listen ([EventListener](http://php.net/manual/fr/class.eventlistener.php)) on socket port (can be <1025 if started as root) and impersonate to other user (if started as with use of posix setuid/gid).
 
-The skelete of the server part are based on SMTP event based example on php site by Andrew Rose :
+The skelton of the server part are based on SMTP event based example on php site by Andrew Rose :
 http://php.net/manual/fr/event.examples.php
 
 The STARTTLS server part are from this example also, the client part has been developped from scratch.
