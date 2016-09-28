@@ -1,3 +1,5 @@
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)
+
 # PHP SMTP Daemon
 
 PHP SMTP daemon are Experimental Project of SMTP server daemon coded 100% in PHP with the PECL-Event extension.
