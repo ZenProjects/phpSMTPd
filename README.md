@@ -4,7 +4,7 @@
 
 PHP SMTP daemon are Experimental Project of SMTP server daemon coded 100% in PHP with the PECL-Event extension.
 
-Within this project they have implemented complete SMTP Client and Server stack 100% in PHP completely based on   [PECL-Event](http://php.net/manual/fr/book.event.php) ([libevent](http://libevent.org/)).
+Within this project they have implemented complete SMTP Client and Server stack 100% in PHP completely based on   [PECL-Event](https://bitbucket.org/osmanov/pecl-event) ([libevent](http://libevent.org/)).
 
 They start as standalone Multiprocess pre-forked server daemon, with a watchdog (using pcntl_fork and pecl-event to manage signal event of the worker).
 
