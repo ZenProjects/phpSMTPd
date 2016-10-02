@@ -109,9 +109,8 @@ Prepare hostname.certificat.chained.crt certificate and hostname.privatekey.key 
 
 like in this links:
 
-http://rene.bz/setting-smtp-authentication-over-tls-postfix/
-
-http://www.postfix.org/TLS_README.html
+- [http://rene.bz/setting-smtp-authentication-over-tls-postfix/](https://github.com/ZenProjects/phpSMTPd/wiki/renessl)
+- http://www.postfix.org/TLS_README.html
 
 ```
 ssl_server_crt          = /path/to/hostname.certificat.chained.crt
