@@ -2,7 +2,7 @@
  /*
  * Author: Mathieu CARBONNEAUX 
  */
-namespace SuperListd;
+namespace phpSMTPd;
 
 require_once("Debug.php");
 require_once("ExitStatus.php");

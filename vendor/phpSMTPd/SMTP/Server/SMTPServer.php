@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 require_once("RFC822.php");
 require_once("Debug.php");

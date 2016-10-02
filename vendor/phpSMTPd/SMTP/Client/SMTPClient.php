@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 use EventBufferEvent;
 use EventBuffer;

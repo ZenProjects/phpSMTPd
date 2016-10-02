@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 class RFC822
 {

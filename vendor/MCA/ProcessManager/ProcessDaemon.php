@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 include_once("Debug.php");
 include_once("ProcessPoolManager.php");

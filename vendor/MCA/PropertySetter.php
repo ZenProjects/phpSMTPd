@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 trait PropertySetter {
     public function __set($name, $value)

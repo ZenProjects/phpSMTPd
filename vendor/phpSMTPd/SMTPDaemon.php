@@ -1,5 +1,5 @@
 <?php
-namespace SuperListd;
+namespace phpSMTPd;
 
 require_once("Debug.php");
 require_once("NetTool.php");
