@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace phpSMTPd\SMTP\Server;
 
 require_once("RFC822.php");
 require_once("Debug.php");
@@ -22,7 +22,7 @@ use EventUtil;
  * Conform with ESMTP standard RFC 1869 and implement this extension : 8BITMIME, STARTTLS, SIZE, XCLIENT, XFORWARD
  */
 
-class SMTPProtocol 
+class SMTPServer 
 {
   // eventbufferevent of the connexion
   public $cnx = null;

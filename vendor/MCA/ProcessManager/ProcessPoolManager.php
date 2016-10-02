@@ -2,7 +2,7 @@
  /*
  * Author: Mathieu CARBONNEAUX 
  */
-namespace phpSMTPd;
+namespace MCA\ProcessManager;
 
 require_once("Debug.php");
 require_once("ExitStatus.php");
@@ -19,9 +19,13 @@ trait EventTools
   public function event_add($base, $name, $fd, $flags, $callback, $timeout = -1 ) 
   {
      $event = new Event($base, $fd, $flags, array($this, $callback), $this);
+
      // to catch notice :
-     // PHP Notice:  Event::add(): Added a signal to event base 0x1dadf30 with signals already added to event_base 0x1da4ec0.  Only one can have signals at a time with the epoll backend. 
-     // must be corrected in adding event_base free method
+     // PHP Notice:  Event::add(): Added a signal to event base 0x1dadf30 
+     // with signals already added to event_base 0x1da4ec0.  
+     // Only one can have signals at a time with the epoll backend. 
+     // Must be corrected in adding event_base free method
+
      //ob_start(); 
      if ($timeout==-1) $event->add();
      else $event->add($timeout);
@@ -291,7 +295,8 @@ class EventProcessPool implements ArrayAccess,Iterator
       if ($this->workers[$workerId]->pid>1) 
       {
 	$stop_time = microtime(true);
-	debug::printf(LOG_NOTICE, "Child pid:%s/#%s remove from pool after %0.3fs of execution\n",$this->workers[$workerId]->pid,$workerId,$stop_time-$this->workers[$workerId]->starttime);
+	debug::printf(LOG_NOTICE, "Child pid:%s/#%s remove from pool after %0.3fs of execution\n",
+	    $this->workers[$workerId]->pid,$workerId,$stop_time-$this->workers[$workerId]->starttime);
       }
       $this->workers[$workerId]->markHasStop();
       return true;

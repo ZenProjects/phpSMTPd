@@ -1,7 +1,5 @@
 <?php
-namespace phpSMTPd;
-
-require_once("Debug.php");
+namespace MCA\Net;
 
 class SSLCiphers
 {

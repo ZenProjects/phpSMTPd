@@ -1,7 +1,9 @@
 <?php
-namespace phpSMTPd;
+
+namespace MCA\Traits;
 
 trait PropertySetter {
+
     public function __set($name, $value)
     {
        debug::printf(LOG_DEBUG,"try to set '$name' with value '$value'\n");
@@ -28,6 +30,7 @@ trait PropertySetter {
 	 throw new \Exception("ERROR Impossible to set '$name' property of '".get_class($this)."' class, does not exist in this class!\n");
        }
     }
+
     public function __isset($name)
     {
        debug::printf(LOG_DEBUG,"check if isset '$name'\n");

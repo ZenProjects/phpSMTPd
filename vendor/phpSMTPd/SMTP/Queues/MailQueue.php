@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace phpSMTPd\SMTP\Queues;
 
 require_once("RFC822.php");
 require_once("Debug.php");

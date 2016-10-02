@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace phpSMTPd\SMTP\Client;
 
 use EventBufferEvent;
 use EventBuffer;

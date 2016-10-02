@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace MCA\ProcessManager;
  
 class ExitStatus
 {

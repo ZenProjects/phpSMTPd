@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace MCA\ProcessManager;
 
 include_once("Debug.php");
 include_once("ProcessPoolManager.php");
@@ -42,7 +42,7 @@ abstract class ProcessDaemon
      Debug::$loglevel=LOG_WARNING;
      $this->basedir=$basedir;
      $this->config_file=$this->basedir . "/config/".$defaultconfig;
-     debug::open($defaultdaemonname,LOG_PID|LOG_PERROR);
+     Debug::open($defaultdaemonname,LOG_PID|LOG_PERROR);
   }
 
   public function main($argc,$argv)
@@ -105,24 +105,24 @@ abstract class ProcessDaemon
        ob_end_clean();
        if ($loglevel<0||$loglevel>LOG_DEBUG||!is_int($loglevel))
        {
-	 debug::printf(LOG_ERR, "Loglevel <%s> not known!",$this->options["log_level"]);
+	 Debug::printf(LOG_ERR, "Loglevel <%s> not known!",$this->options["log_level"]);
 	 $this->syntax($args);
        }
        Debug::$loglevel=$loglevel;
     }
     if (isset($this->options["stderr"]))
-       debug::open($this->options['daemon_syslogname'],LOG_PID|LOG_PERROR);
+       Debug::open($this->options['daemon_syslogname'],LOG_PID|LOG_PERROR);
     else
-       debug::open($this->options['daemon_syslogname'],LOG_PID);
+       Debug::open($this->options['daemon_syslogname'],LOG_PID);
 
     //////////////////////////
     // start banner
     //////////////////////////
-    debug::printf(LOG_NOTICE, "Starting %s Serveur pid:%s listen:%s at <%s>\n",$this->options['daemon_processname'],posix_getpid(),$this->options['listen'],gmdate('r'));
-    debug::printf(LOG_INFO, "Using PHP v%s\n",PHP_VERSION);
-    debug::printf(LOG_INFO, " With PECL-Event v%s\n",phpversion('event'));
-    debug::printf(LOG_INFO, " With %s\n",OPENSSL_VERSION_TEXT);
-    debug::printf(LOG_INFO, " With extensions : %s\n",implode(',',get_loaded_extensions()));
+    Debug::printf(LOG_NOTICE, "Starting %s Serveur pid:%s listen:%s at <%s>\n",$this->options['daemon_processname'],posix_getpid(),$this->options['listen'],gmdate('r'));
+    Debug::printf(LOG_INFO, "Using PHP v%s\n",PHP_VERSION);
+    Debug::printf(LOG_INFO, " With PECL-Event v%s\n",phpversion('event'));
+    Debug::printf(LOG_INFO, " With %s\n",OPENSSL_VERSION_TEXT);
+    Debug::printf(LOG_INFO, " With extensions : %s\n",implode(',',get_loaded_extensions()));
     $this->callHook("StartMsg",array($this));
 
     //////////////////////////
@@ -143,7 +143,7 @@ abstract class ProcessDaemon
 
   protected function run()
   {
-    debug::printf(LOG_NOTICE,"Try to run the daemon\n");
+    Debug::printf(LOG_NOTICE,"Try to run the daemon\n");
     $this->callHook("Run",array($this));
     // start in listen mode
     if (isset($this->options["daemonmode"])&&$this->options["daemonmode"]=="listen")
@@ -167,14 +167,14 @@ abstract class ProcessDaemon
   //
   protected function run_listen()
   {
-      debug::printf(LOG_NOTICE,"Run the daemon in listen mode\n");
+      Debug::printf(LOG_NOTICE,"Run the daemon in listen mode\n");
 
       // initialise event_base specificaly to listener to avoid reentrant call to dispatch from HeartBeat event
       // after forking a worker
       $this->listenbase = new EventBase();
       if (!$this->listenbase) 
       {
-	  debug::exit_with_error(69,"Couldn't open Listen event base\n");
+	  Debug::exit_with_error(69,"Couldn't open Listen event base\n");
       }
 
       $worker=new EventProcessWorker($this->options['daemon_processname']."-Worker",-1,$this->listenbase);
@@ -182,7 +182,7 @@ abstract class ProcessDaemon
       $this->ppm->heartbeat=$this->heartbeat;
       $this->initipc();
       $this->callHook("RunListen",array($this));
-      debug::printf(LOG_NOTICE,"Go in dispatch\n");
+      Debug::printf(LOG_NOTICE,"Go in dispatch\n");
       $this->ppm->dispatch();
       $this->RemoveIPCSHM();
   }
@@ -192,7 +192,7 @@ abstract class ProcessDaemon
   //
   protected function run_inetd()
   {
-      debug::printf(LOG_NOTICE,"Run the daemon in inetd mode\n");
+      Debug::printf(LOG_NOTICE,"Run the daemon in inetd mode\n");
       $address=null;
       $address_string=stream_socket_get_name(STDIN,true);
       if($address_string!==false)
@@ -200,12 +200,12 @@ abstract class ProcessDaemon
 	if (preg_match("/([0-9]+[.][0-9]+[.][0-9]+[.][0-9]+)[:]([0-9]+)/",$address_string,$arr)==1)
 	{
 	  $parsed_address=array(0=>$arr[1],1=>$arr[2]);
-	  debug::printf(LOG_NOTICE,"Client connected with inetd from this parsed address: %s:%s\n",$parsed_address[0],$parsed_address[1]);
+	  Debug::printf(LOG_NOTICE,"Client connected with inetd from this parsed address: %s:%s\n",$parsed_address[0],$parsed_address[1]);
 	  $address=$parsed_address;
 	}
 	else
 	{
-	  debug::printf(LOG_NOTICE,"Client connected with inetd from this address: %s\n",$address_string);
+	  Debug::printf(LOG_NOTICE,"Client connected with inetd from this address: %s\n",$address_string);
 	}
       }
       else
@@ -224,7 +224,7 @@ abstract class ProcessDaemon
       $this->droprootandsetuid($this->options['user']);
       // call RunInet Hook!
       $this->callHook("RunInetd",array($this,$address));
-      debug::printf(LOG_NOTICE,"Go in dispatch\n");
+      Debug::printf(LOG_NOTICE,"Go in dispatch\n");
       $this->smtp->listen();
   }
   
@@ -260,7 +260,7 @@ abstract class ProcessDaemon
 	if ($args["listen"]!="") $this->options['listen']=$this->args["listen"];
 	if (!isset($this->options['listen']))
 	{
-	  debug::printf(LOG_ERR, "you must specify listen address in command line or in config file!");
+	  Debug::printf(LOG_ERR, "you must specify listen address in command line or in config file!");
 	  $this->syntax($args);
 	}
         if (isset($args["daemon"])) $this->options["daemonize"]=$args["daemon"];
@@ -273,19 +273,19 @@ abstract class ProcessDaemon
 
       if (!isset($args["listen"])&&!isset($args["inetd"]))
       {
-        debug::printf(LOG_ERR, "you must specify inetd or listen mode!");
+        Debug::printf(LOG_ERR, "you must specify inetd or listen mode!");
         $this->syntax($args);
       }
 
       if (isset($args["listen"])&&isset($args["inetd"]))
       {
-        debug::printf(LOG_ERR, "you cannot use inetd and listen mode at the same time!");
+        Debug::printf(LOG_ERR, "you cannot use inetd and listen mode at the same time!");
         $this->syntax($args);
       }
 
       if (isset($args["daemon"])&&isset($args["inetd"]))
       {
-        debug::printf(LOG_ERR, "you cannot use inetd listen mode with daemon!");
+        Debug::printf(LOG_ERR, "you cannot use inetd listen mode with daemon!");
         $this->syntax($args);
       }
 
@@ -295,13 +295,13 @@ abstract class ProcessDaemon
       }
       if (!isset($this->options['user']))
       {
-         debug::printf(LOG_ERR, "user not set in config, default to nobody");
+         Debug::printf(LOG_ERR, "user not set in config, default to nobody");
          $this->options['user']='nobody';
       }
 
       if (isset($args["stderr"])&&isset($args["daemon"]))
       {
-        debug::printf(LOG_ERR, "you cannot use stderr and daemon mode!");
+        Debug::printf(LOG_ERR, "you cannot use stderr and daemon mode!");
         $this->syntax($args);
       }
       if (isset($args["stderr"])&&!isset($args["daemon"]))
@@ -331,7 +331,7 @@ abstract class ProcessDaemon
       $address_string=stream_socket_get_name(STDIN,true);
       if ($address_string!==false) 
       {
-	debug::printf(LOG_ERR,$syntaxerror,basename($this->argv[0]));
+	Debug::printf(LOG_ERR,$syntaxerror,basename($this->argv[0]));
       }
       else 
       {
@@ -345,54 +345,54 @@ abstract class ProcessDaemon
   {
       if ( version_compare( PHP_VERSION, '5.4', '<' ) ) 
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." requires PHP 5.5\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." requires PHP 5.5\n");
       }
 
       /*
       if (!extension_loaded("apcu")&&ini_get("apc.enable_cli")==1)
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need apcu and apc.enable_cli=1 in php.ini extension http://pecl.php.net/package/APCu\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need apcu and apc.enable_cli=1 in php.ini extension http://pecl.php.net/package/APCu\n");
       }
       */
 
       if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'||strtoupper(substr(PHP_OS, 0, 6))==='CYGWIN') 
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." don't work on windows or in CYGWIN!\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." don't work on windows or in CYGWIN!\n");
       }
 
       if (!function_exists('cli_set_process_title'))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need cli_set_process_title function, http://php.net/manual/en/function.cli-set-process-title.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need cli_set_process_title function, http://php.net/manual/en/function.cli-set-process-title.php\n");
       }
 
       if (!extension_loaded("pcre"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need pcre extension, http://php.net/manual/en/book.pcre.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need pcre extension, http://php.net/manual/en/book.pcre.php\n");
       }
 
       if (!extension_loaded("posix"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need posix extension, http://php.net/manual/en/book.posix.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need posix extension, http://php.net/manual/en/book.posix.php\n");
       }
 
       if (!extension_loaded("pcntl"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need PCNTL extension, http://php.net/manual/en/book.pcntl.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need PCNTL extension, http://php.net/manual/en/book.pcntl.php\n");
       }
 
       if (!extension_loaded("sysvsem"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need sysvsem extension, http://php.net/manual/en/book.sem.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need sysvsem extension, http://php.net/manual/en/book.sem.php\n");
       }
 
       if (!extension_loaded("sysvshm"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need sysvshm extension, http://php.net/manual/en/book.sem.php\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need sysvshm extension, http://php.net/manual/en/book.sem.php\n");
       }
 
       if (!extension_loaded("event")||version_compare(phpversion('event'),"1.11.0","<"))
       {
-	  debug::exit_with_error(6,$this->options['daemon_processname']." need Event >=1.11.0 extension, get last git version at https://bitbucket.org/osmanov/pecl-event/overview\n");
+	  Debug::exit_with_error(6,$this->options['daemon_processname']." need Event >=1.11.0 extension, get last git version at https://bitbucket.org/osmanov/pecl-event/overview\n");
       }
   }
 
@@ -403,14 +403,14 @@ abstract class ProcessDaemon
       $this->config_file=$basedir."/".$this->config_file;
      if (!file_exists($this->config_file)) 
      {
-       debug::exit_with_error(1,"Error config file <%s> not found!\n",$this->config_file);
+       Debug::exit_with_error(1,"Error config file <%s> not found!\n",$this->config_file);
      }
 
-     debug::printf(LOG_NOTICE, "Load Configuration from %s\n",$this->config_file);
+     Debug::printf(LOG_NOTICE, "Load Configuration from %s\n",$this->config_file);
      $this->options=parse_ini_file($this->config_file,true);
      if ($this->options===false)
      {
-       debug::exit_with_error(1,"Error in loading config file <%s>\n",$this->config_file);
+       Debug::exit_with_error(1,"Error in loading config file <%s>\n",$this->config_file);
      }
 
      // check for eval some config params
@@ -454,7 +454,7 @@ abstract class ProcessDaemon
 
   private function daemonize()
   {
-    debug::printf(LOG_NOTICE, "Daemonize...\n");
+    Debug::printf(LOG_NOTICE, "Daemonize...\n");
     if ( defined( 'STDIN' ) ) {
 	    fclose( STDIN );
 	    fclose( STDOUT );
@@ -463,7 +463,7 @@ abstract class ProcessDaemon
     // Detach from calling process
     $pid = pcntl_fork();
     if ( $pid < 0 )
-	 debug::exit_with_error(200,"Fork impossible\n");
+	 Debug::exit_with_error(200,"Fork impossible\n");
     if ( $pid > 0 )
 	    exit(0);
     @umask(0);

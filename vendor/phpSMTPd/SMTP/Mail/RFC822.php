@@ -1,5 +1,5 @@
 <?php
-namespace phpSMTPd;
+namespace phpSMTPd\Mail;
 
 class RFC822
 {
