@@ -1,3 +1,5 @@
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)
+
 # PHP SMTP Daemon
 
 PHP SMTP daemon are Experimental Project of SMTP server daemon coded 100% in PHP with the PECL-Event extension.
@@ -107,9 +109,8 @@ Prepare hostname.certificat.chained.crt certificate and hostname.privatekey.key 
 
 like in this links:
 
-http://rene.bz/setting-smtp-authentication-over-tls-postfix/
-
-http://www.postfix.org/TLS_README.html
+- [http://rene.bz/setting-smtp-authentication-over-tls-postfix/](https://github.com/ZenProjects/phpSMTPd/wiki/renessl)
+- http://www.postfix.org/TLS_README.html
 
 ```
 ssl_server_crt          = /path/to/hostname.certificat.chained.crt
