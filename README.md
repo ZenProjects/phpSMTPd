@@ -23,7 +23,7 @@ http://daemon.io/
 
 # WARNING
 
-## _The project are completely experimental_
+## <b style='color:red'>The project are completely experimental</b>
 
 ## At this stage of the project they only receive SMTP message and store message it on inbound queue...
 
