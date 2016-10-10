@@ -30,8 +30,6 @@ The STARTTLS server part are from this example also, the client part has been de
 The PHP daemon also inspired me.
 http://daemon.io/
 
-# Implementation
-
 The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
 
 | Links                              | SMTP verbs                  |
@@ -107,7 +105,7 @@ tls = false
 ```
 
 
-Prepare hostname.certificat.chained.crt certificate and hostname.privatekey.key private key files.
+Prepare `hostname.certificat.chained.crt` certificate and `hostname.privatekey.key` private key files.
 
 like in this links:
 
@@ -136,15 +134,15 @@ root      70064  32148  0 02:01 pts/3    00:00:00 grep phpSMTP
 
 ```
 
-read in your syslog config file where "mail" facilty go.
+Read in your syslog config file where "mail" facilty go.
 
-example in /etc/rsyslog.conf:
+Example in `/etc/rsyslog.conf` :
 ```
 # Log all the mail messages in one place.
 mail.*                                                  -/path/to/maillog
 ```
 
-and you can see debug information on this maillog:
+And you can see debug information on this maillog:
 
 ```
 $ tail -f /path/to/maillog 
@@ -256,7 +254,7 @@ Nov  8 02:01:36 hotpoint phpSMTPd[70054]: Worker #3 with pid:70054 started at <S
 
   1. Prepare cert.pem certificate and privkey.pem private key files.
 
-     http://rene.bz/setting-smtp-authentication-over-tls-postfix/
+     [http://rene.bz/setting-smtp-authentication-over-tls-postfix/](https://github.com/ZenProjects/phpSMTPd/wiki/renessl)
 
      http://www.postfix.org/TLS_README.html
 
@@ -277,14 +275,14 @@ Nov  8 02:01:36 hotpoint phpSMTPd[70054]: Worker #3 with pid:70054 started at <S
        - send CTRL-D and gnutls-cli go in TLS handcheck
 
 
-  you can test also with swaks: http://www.jetmore.org/john/code/swaks/
+  You can test also with swaks: http://www.jetmore.org/john/code/swaks/
    
    $ ./swaks --to mylist@listes.mydomain.tld --from myaddresse@mydomain.tld --server 127.0.0.1:25 -tls
 
 
 -----------------------------------
 
-## The SMTP principal rfcs:
+## The SMTP principal RFCs:
 
   http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
 
