@@ -62,12 +62,14 @@ PHP Extension:
 
 - POSIX
 
-## starting the daemon
+## Install and start the daemon
 
-Clone the git to repertoire to install:
+### Clone the git to repertoire to install:
 ```
 $ git clone https://github.com/ZenProjects/phpsmtpd.git
 ```
+
+### Configure the daemon :
 
 ```
 $ cd phpsmtpd
@@ -89,7 +91,7 @@ change the owner of this directory to "user" parameter.
 queue_dir = /path/to/queue/basedir
 ```
 
-activate/desactivate smtp extension:
+### Activate/desactivate SMTP extension:
 
 - set **tls=true** for use SMTP STARTTLS
 - set **xclient=true** for use XCLIENT extension (to use behind postfix or an smtp proxy)
@@ -104,8 +106,7 @@ xforward = false
 tls = false
 ```
 
-
-Prepare `hostname.certificat.chained.crt` certificate and `hostname.privatekey.key` private key files.
+### Prepare `hostname.certificat.chained.crt` certificate and `hostname.privatekey.key` private key files.
 
 like in this links:
 
@@ -117,7 +118,7 @@ ssl_server_crt          = /path/to/hostname.certificat.chained.crt
 ssl_server_key          = /path/to/hostname.privatekey.key
 ```
 
-start the server:
+### Start the server:
 ```
 $ sbin/smtpd --listen --daemon
 ```
@@ -134,7 +135,7 @@ root      70064  32148  0 02:01 pts/3    00:00:00 grep phpSMTP
 
 ```
 
-Read in your syslog config file where "mail" facilty go.
+### Read in your syslog config file where "mail" facilty go.
 
 Example in `/etc/rsyslog.conf` :
 ```
@@ -172,8 +173,6 @@ Nov  8 02:01:36 hotpoint phpSMTPd[70053]: Worker #2 with pid:70053 started at <S
 Nov  8 02:01:36 hotpoint phpSMTPd[70045]: EventProcessPoolManager Worker #3 forked with pid:70054 at Sat, 08 Nov 2014 01:01:36 +0000
 Nov  8 02:01:36 hotpoint phpSMTPd[70054]: Worker #3 with pid:70054 started at <Sat, 08 Nov 2014 01:01:36 +0000>
 ```
-
-
 
 -----------------------------------
 
