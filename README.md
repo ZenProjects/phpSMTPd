@@ -64,7 +64,7 @@ PHP Extension:
 
 ## Install and start the daemon
 
-### Clone the git to repertoire to install:
+### Clone the git to the directory to install:
 ```
 $ git clone https://github.com/ZenProjects/phpsmtpd.git
 ```
