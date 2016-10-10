@@ -1,5 +1,17 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)
 
+--------
+--------
+
+# WARNING
+
+## _The project are completely experimental_
+
+## At this stage of the project they only receive SMTP message and store message it on inbound queue...
+
+--------
+--------
+
 # PHP SMTP Daemon
 
 PHP SMTP daemon are Experimental Project of SMTP server daemon coded 100% in PHP with the PECL-Event extension.
@@ -18,17 +30,7 @@ The STARTTLS server part are from this example also, the client part has been de
 The PHP daemon also inspired me.
 http://daemon.io/
 
---------
---------
-
-# WARNING
-
-## <b style='color:red'>The project are completely experimental</b>
-
-## At this stage of the project they only receive SMTP message and store message it on inbound queue...
-
---------
---------
+# Implementation
 
 The SMTP Implementation are largely based on D.J. Bernstein (QMAIL) implementation notes: http://cr.yp.to/smtp.html
 
