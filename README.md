@@ -7,7 +7,7 @@
 
 ## _The project are completely experimental_
 
-## At this stage of the project they only receive SMTP message and store message it on inbound queue...
+## At this stage of the project they can only receive SMTP message and store message it on inbound queue...
 
 --------
 --------
